@@ -92,6 +92,9 @@ class FACTRTeleopUR7e(FACTRTeleop):
         gf = self.config["controller"]["gripper_feedback"]
         self.gripper_feedback_gain = gf.get("gain", 1.0) #.get is used to prevent key error if they aren't configured.
         self.gripper_torque_ema_beta = gf.get("ema_beta", 0.9)
+        # Timestamp of the previous servoJ call, used to measure the real control
+        # period for servoJ's `time` argument (see update_communication).
+        self._last_servo_t = None
 
     # ------------------------------------------------------------------ setup
     def set_up_communication(self):
@@ -157,8 +160,9 @@ class FACTRTeleopUR7e(FACTRTeleop):
         # leader matching / calibration.
         follower_q = np.array(self.rtde_r.getActualQ())
         match_q = self.initial_match_joint_pos[0:self.num_arm_joints]
-        start_err = float(np.linalg.norm(follower_q - match_q))
-        if start_err > 0.2:
+        # Per-joint absolute error across all arm joints.
+        per_joint_err = np.abs(follower_q[:self.num_arm_joints] - match_q[:self.num_arm_joints])
+        if np.any(per_joint_err > 0.5):
             try:
                 self.rtde_c.servoStop()
                 self.rtde_c.stopScript()
@@ -168,9 +172,10 @@ class FACTRTeleopUR7e(FACTRTeleop):
                 pass
             raise RuntimeError(
                 f"FACTR UR7e {self.name}: follower start config differs from "
-                f"initial_match_joint_pos by {start_err:.3f} rad (limit 0.2). "
-                f"Refusing to start to avoid a servoJ jump. Jog the UR to "
-                f"initial_match_joint_pos = {[round(x, 4) for x in match_q]} "
+                f"initial_match_joint_pos per-joint by "
+                f"{[round(float(e), 3) for e in per_joint_err]} rad (limit 0.5). "
+                f"Refusing to start to avoid a servoJ jump. "
+                f"Jog the UR to initial_match_joint_pos = {[round(x, 4) for x in match_q]} "
                 f"before launching (UR is currently at "
                 f"{[round(x, 4) for x in follower_q.tolist()]})."
             )
@@ -282,11 +287,19 @@ class FACTRTeleopUR7e(FACTRTeleop):
 
     # ----------------------------------------------------------- command stream
     def update_communication(self, leader_arm_pos, leader_gripper_pos):
-        # Stream the leader joint position as a servoJ target to the UR follower.
-        # v and a are ignored by servoJ; dt/lookahead/gain shape the tracking.
+        # servoJ's `time` arg must match the ACTUAL interval between calls, not the
+        # nominal 1/frequency. The loop is Dynamixel/feedback-bound and runs well
+        # below the configured rate (~130 Hz vs 500 Hz) with jitter, so passing
+        # self.dt (=0.002) makes each target expire before the next arrives and the
+        # arm barely moves. Measure the real period and feed that instead.
+        now = time.perf_counter()
+        servo_dt = self.dt if self._last_servo_t is None else now - self._last_servo_t
+        self._last_servo_t = now
+        servo_dt = float(np.clip(servo_dt, 0.002, 0.05))
+        # v and a are ignored by servoJ; time/lookahead/gain shape the tracking.
         self.rtde_c.servoJ(
             list(map(float, leader_arm_pos)),
-            0.0, 0.0, self.dt, self.servo_lookahead_time, self.servo_gain,
+            0.0, 0.0, servo_dt, self.servo_lookahead_time, self.servo_gain,
         )
 
         # Map the leader trigger angle to the Robotiq command space (0..255).

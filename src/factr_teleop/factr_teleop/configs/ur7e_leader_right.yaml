@@ -12,7 +12,7 @@ dynamixel:
     "XL330_M077_T",
   ]
   # length 7 (all motors). Flip a sign during testing if a joint reads/drives backwards.
-  joint_signs: [1, 1, -1, 1, 1, 1, 1]
+  joint_signs: [1, 1, -1, 1, 1, 1, -1]
 
 arm_teleop:
   leader_urdf: "factr_teleop_ur5_gello.urdf"
@@ -29,7 +29,7 @@ arm_teleop:
   initialization:
     #The joint angles of the UR when its in calibration stance.
     calibration_joint_pos: [2.13, -0.058, 0.226, -1.69, -3.23, -6.11] 
-
+    
     # Physically place the leader in this pose at launch.
     initial_match_joint_pos: [1.64, -1.500, 1.29, -1.79, -1.56, -1.57]
 
@@ -39,7 +39,7 @@ gripper_teleop:
   speed: 255
   force: 128
   # 255 is closed 0 is open for robotiq 2f-85 grippr
-  invert: False
+  invert: True
 
 controller:
   frequency: 500
@@ -50,7 +50,7 @@ controller:
     motor_scalar: 94.5652173913
   gravity_comp:
     enable: True
-    gain: 2   # starting point — tune for the UR-GELLO leader once the URDF is in
+    gain: 0.85   # starting point — tune for the UR-GELLO leader once the URDF is in
   null_space_regulation:
     # Disabled: a 6-DOF arm doing a 6-DOF task is non-redundant (kp=kd=0 => no null-space torque).
     null_space_joint_target: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]

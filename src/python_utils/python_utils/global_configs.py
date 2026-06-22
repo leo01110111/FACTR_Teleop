@@ -24,7 +24,7 @@
 # by RTDEControlInterface, and the Robotiq 2F-85 gripper socket port.
 
 ur_right_ip_address = "192.168.2.2"
-ur_left_ip_address = "192.168.1.2"
+ur_left_ip_address = "192.168.1.2"  # direct link to PC NIC enp209s0f1np1 (192.168.1.100/24)
 
 ur_right_real_addresses = {
     "ip": ur_right_ip_address,

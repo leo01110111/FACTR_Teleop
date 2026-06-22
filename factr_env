@@ -16,6 +16,16 @@ source /opt/ros/jazzy/setup.bash
 source "$REPO/.venv/bin/activate"
 source "$REPO/install/setup.bash"
 
+# ROS launches the node via its installed entry-point script, whose shebang is the
+# *resolved* interpreter (/usr/bin/python3.12, because uv's .venv/bin/python is a
+# symlink to it). A process started that way does NOT load the venv's site-packages,
+# so venv-only deps (ur_rtde / rtde_control, pyzmq) and the editable dynamixel_sdk
+# would be missing. Bridge them onto PYTHONPATH so the system interpreter finds them.
+# (.pth files in PYTHONPATH dirs are not processed, so the editable dynamixel_sdk
+# source dir is added explicitly.)
+PYVER="$("$REPO/.venv/bin/python" -c 'import sys;print(f"python{sys.version_info.major}.{sys.version_info.minor}")')"
+export PYTHONPATH="$REPO/.venv/lib/$PYVER/site-packages:$REPO/src/factr_teleop/factr_teleop/dynamixel/python/src${PYTHONPATH:+:$PYTHONPATH}"
+
 echo "FACTR env active: ROS 2 Jazzy + .venv + workspace overlay  ($REPO)"
 
 # If executed (not sourced), keep the environment alive in an interactive shell.

@@ -254,16 +254,31 @@ class FACTRTeleop(Node, ABC):
         Waits until the leader arm is manually moved to roughly the same configuration as the 
         follower arm before the follower arm starts mirroring the leader arm. 
         """
-        curr_pos, _, _, _ = self.get_leader_joint_states()
-        while (np.linalg.norm(curr_pos - self.initial_match_joint_pos[0:self.num_arm_joints]) > 0.6):
-            current_joint_error = np.linalg.norm(
+        curr_pos, _, curr_gripper_pos, _ = self.get_leader_joint_states()
+        while np.any(
+            np.abs(curr_pos - self.initial_match_joint_pos[0:self.num_arm_joints]) > 0.6
+        ):
+            per_joint_err = np.abs(
                 curr_pos - self.initial_match_joint_pos[0:self.num_arm_joints]
             )
-            self.get_logger().info(
-                f"FACTR TELEOP {self.name}: Please match starting joint pos. Current error: {current_joint_error}"
+            match_str = np.array2string(
+                self.initial_match_joint_pos[0:self.num_arm_joints],
+                precision=2, floatmode="fixed", separator=", ",
             )
-            curr_pos, _, _, _ = self.get_leader_joint_states()
-            time.sleep(0.5)
+            curr_str = np.array2string(
+                curr_pos, precision=2, floatmode="fixed", separator=", ",
+            )
+            err_str = np.array2string(
+                per_joint_err, precision=2, floatmode="fixed", separator=", ",
+            )
+            self.get_logger().info(
+                f"FACTR TELEOP {self.name}: Please match starting joint pos. Per-joint error (limit 0.6): {err_str}\n\
+                Initial match joint position: {match_str}\n\
+                Current joint position: {curr_str}\n\
+                Gripper joint position (post-calibration): {curr_gripper_pos:.2f}"
+            )
+            curr_pos, _, curr_gripper_pos, _ = self.get_leader_joint_states()
+            time.sleep(1)
         self.get_logger().info(f"FACTR TELEOP {self.name}: Initial joint position matched.")
 
     def shut_down(self):
