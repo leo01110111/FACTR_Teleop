@@ -21,6 +21,7 @@ setup(
     entry_points={
         'console_scripts': [
             'factr_teleop_franka = factr_teleop.factr_teleop_franka_zmq:main',
+            'factr_teleop_ur7e = factr_teleop.factr_teleop_ur7e:main',
             'factr_teleop_grav_comp_demo = factr_teleop.factr_teleop_grav_comp_demo:main',
         ],
     },

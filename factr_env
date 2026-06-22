@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Activate the FACTR_Teleop environment:
+#   1) ROS 2 Jazzy underlay
+#   2) the repo's uv virtualenv (.venv)
+#   3) the colcon workspace overlay (install/setup.bash)
+#
+# Usage:
+#   ./factr_env          run it -> drops you into a shell with everything active
+#   source ./factr_env   activate in your CURRENT shell instead of a subshell
+#
+# Exit the spawned shell with `exit` (or Ctrl-D) to return to your normal shell.
+
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+source /opt/ros/jazzy/setup.bash
+source "$REPO/.venv/bin/activate"
+source "$REPO/install/setup.bash"
+
+echo "FACTR env active: ROS 2 Jazzy + .venv + workspace overlay  ($REPO)"
+
+# If executed (not sourced), keep the environment alive in an interactive shell.
+if ! (return 0 2>/dev/null); then
+    exec "${SHELL:-bash}" -i
+fi

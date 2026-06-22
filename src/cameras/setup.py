@@ -22,6 +22,7 @@ setup(
         'console_scripts': [
             'zed = cameras.zed:main',
             'realsense = cameras.realsense:main',
+            'arducam = cameras.arducam:main',
         ],
     },
 )

@@ -1,0 +1,74 @@
+name: left
+
+dynamixel:
+  leader_name: "UR7e_left_leader"
+  # by-id basename only — the code prepends "/dev/serial/by-id/"
+  # Arm 1 = FTBEO9N7 (ttyUSB0). Arm 2 = ...FTBEO91I-if00-port0
+  dynamixel_port: "usb-FTDI_USB__-__Serial_Converter_FTBEO9N7-if00-port0"
+  # 7 motors: 6 arm joints (XC330-T288-T) + 1 gripper (XL330-M077-T)
+  servo_types: [
+    "XC330_T288_T", "XC330_T288_T", "XC330_T288_T",
+    "XC330_T288_T", "XC330_T288_T", "XC330_T288_T",
+    "XL330_M077_T",
+  ]
+  # length 7 (all motors). Flip a sign during testing if a joint reads/drives backwards.
+  #TODO use the readout script
+  joint_signs: [1, 1, 1, 1, 1, 1, 1]
+
+arm_teleop:
+  leader_urdf: "factr_teleop_ur5_gello.urdf"
+  #For the follower arm (UR servoJ params, read from arm_teleop.servo)
+  servo:
+    lookahead_time: 0.1
+    gain: 300.0
+    watchdog_min_frequency: 20.0
+  num_arm_joints: 6
+  # UR e-series joints: +/- 2*pi (+/- 360 deg). Tighten if the GELLO's range is smaller.
+  arm_joint_limits_max: [6.2832, 6.2832, 6.2832, 6.2832, 6.2832, 6.2832]
+  arm_joint_limits_min: [-6.2832, -6.2832, -6.2832, -6.2832, -6.2832, -6.2832]
+  arm_joint_limits_safety_margin: 0.1
+  initialization:
+    #The joint angles of the UR when its in calibration stance.
+    #TODO this needs to be from the ur. make it flat
+    calibration_joint_pos: [-1.58, -1.11, -2.84, -0.21, -0.10, 0.05] 
+    # Physically place the leader in this pose at launch.
+    #TODO make it comfortable for the user. Arched stance works.
+    initial_match_joint_pos: [-1.58, -1.11, -2.84, -0.21, -0.10, 0.05]
+
+gripper_teleop:
+  # max range (rad) of the leader gripper trigger
+  actuation_range: 0.8
+  speed: 255
+  force: 128
+  # 255 is closed 0 is open for robotiq 2f-85 grippr
+  invert: True
+
+controller:
+  frequency: 500
+  torque_feedback:
+    enable: True
+    gain: 3.0
+    damping: 0.0
+    motor_scalar: 94.5652173913
+  gravity_comp:
+    enable: True
+    gain: 0.85   # starting point — tune for the UR-GELLO leader once the URDF is in
+  null_space_regulation:
+    # Disabled: a 6-DOF arm doing a 6-DOF task is non-redundant (kp=kd=0 => no null-space torque).
+    null_space_joint_target: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    kp: 0.0
+    kd: 0.0
+  static_friction_comp:
+    enable_speed: 0.9
+    gain: 0.6
+  joint_limit_barrier:
+    kp: 1.03561658022
+    kd: 0.04315069084
+  joint_position_control:
+    interpolation_step_size: 0.5
+    kp: 1.03561658022
+    kd: 0.04315069084
+  gripper_feedback:
+    enable: True
+    ema_beta: 0.9
+    gain: 1.5

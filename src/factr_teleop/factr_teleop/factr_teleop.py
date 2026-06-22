@@ -193,6 +193,20 @@ class FACTRTeleop(Node, ABC):
         configuration roughly corresponding to the follower's calibration position 
         described in self.calibration_joint_pos (within ±90 degrees per joint).
         """
+        import json
+        offset_filename = f"offsets_{self.config['dynamixel']['leader_name']}.json"
+        offset_file = os.path.join(get_workspace_root(), "src/factr_teleop/factr_teleop/configs", offset_filename)
+
+        if os.path.exists(offset_file):
+            if verbose:
+                self.get_logger().info(f"FACTR TELEOP: Loading permanent offsets from {offset_filename}")
+            with open(offset_file, 'r') as f:
+                self.joint_offsets = np.array(json.load(f))
+            return
+
+        if verbose:
+            self.get_logger().info(f"FACTR TELEOP: Calibrating offsets and saving to {offset_filename}")
+
         # warm up
         for _ in range(10):
             self.driver.get_positions_and_velocities()
@@ -230,6 +244,10 @@ class FACTRTeleop(Node, ABC):
                 + ", ".join([f"{int(np.round(x/(np.pi/2)))}*np.pi/2" for x in self.joint_offsets])
                 + " ]",
             )
+        
+        # save offsets
+        with open(offset_file, 'w') as f:
+            json.dump(self.joint_offsets.tolist(), f)
     
     def _match_start_pos(self):
         """

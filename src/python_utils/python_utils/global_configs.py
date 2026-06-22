@@ -16,10 +16,33 @@
 # limitations under the License.
 # ---------------------------------------------------------------------------
 
+#For the UR7e
+# The UR arms are commanded directly over UR RTDE (ur_rtde): the UR control box
+# is itself the follower controller (servoJ does the real-time interpolation/
+# tracking internally), so there is no separate follower process and no ZMQ hop.
+# We therefore only need each arm's own IP, the ExternalControl URCap port used
+# by RTDEControlInterface, and the Robotiq 2F-85 gripper socket port.
+
+ur_right_ip_address = "192.168.2.2"
+ur_left_ip_address = "192.168.1.2"
+
+ur_right_real_addresses = {
+    "ip": ur_right_ip_address,
+    "ur_cap_port": 50003,   # ExternalControl URCap "Custom port" on this arm
+    "gripper_port": 63352,  # Robotiq 2F-85 socket exposed by the Robotiq URCap
+}
+
+ur_left_real_addresses = {
+    "ip": ur_left_ip_address,
+    "ur_cap_port": 50002,
+    "gripper_port": 63352,
+}
+
+#For the Franka (from the original FACTR Teleop code)
+
 sim_desktop_ip_address = "172.16.0.9"
 franka_left_ip_address = "172.16.0.1"
 franka_right_ip_address = "172.16.0.3"
-
 
 franka_right_real_zmq_addresses = {
     "joint_state_sub":  f"tcp://{franka_right_ip_address}:3099",
