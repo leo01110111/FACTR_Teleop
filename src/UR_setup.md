@@ -177,6 +177,23 @@ The exact sequence that works, with the gotchas that bite in practice.
 - **Serial port busy** — close `viz_pose_slider.py` / `leader_readout.py` first;
   they hold the U2D2 and block the node.
 
-- **Gripper not connecting** (`63352` closed) — activate the Robotiq gripper on the
-  pendant. The node degrades gracefully and runs the arm without the follower
-  gripper if it can't connect.
+- **Gripper not connecting** (`63352` closed from the PC) — first activate the
+  Robotiq gripper on the pendant. If it's still closed, the cause is the
+  **e-Series controller firewall**, not the gripper daemon. The Robotiq URCap
+  daemon already binds `0.0.0.0:63352` (verified: the robot can reach
+  `192.168.1.2:63352` from its own URScript), but the controller's iptables drops
+  *external* inbound connections to `63352` while allowing the built-in UR ports
+  (`29999`, `30001-30004`, ...). Fix: install the patched gripper URCap
+  **`Robotiq_Grippers-1.8.13-factrfw.urcap`**, which is stock UCG-1.8.13 with one
+  change — its root-run daemon launcher (`robotiq_2f_gripper_driver.sh`) adds
+  `iptables -I INPUT -p tcp --dport 63352 -j ACCEPT` at startup. Legacy `.urcap`
+  bundles are unsigned on PolyScope 5.x, so it repackages without re-signing.
+  After install + PolyScope restart, verify from the PC:
+  ```
+  nc -z -w2 192.168.1.2 63352 && printf 'GET POS\n' | nc -w1 192.168.1.2 63352   # expect: POS <n>
+  ```
+  Diagnostics that pin this down (run a URScript probe on port `30002` while the
+  robot is in **Remote Control**; have it `socket_open` to `127.0.0.1:63352`,
+  `192.168.1.2:63352`, and back to the PC): loopback OPEN + own-external-IP OPEN +
+  PC CLOSED == firewall. The node still degrades gracefully (arm runs without the
+  follower gripper) if `63352` can't be reached.
