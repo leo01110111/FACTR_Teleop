@@ -95,6 +95,7 @@ class FACTRTeleopUR7e(FACTRTeleop):
         # Timestamp of the previous servoJ call, used to measure the real control
         # period for servoJ's `time` argument (see update_communication).
         self._last_servo_t = None
+        self._last_watchdog_wait_warn_t = 0.0
 
     # ------------------------------------------------------------------ setup
     def set_up_communication(self):
@@ -226,6 +227,25 @@ class FACTRTeleopUR7e(FACTRTeleop):
                     f"Continuing without follower gripper."
                 )
                 self.gripper = None
+
+    def _while_waiting_for_start_pos(self):
+        try:
+            self.rtde_c.kickWatchdog()
+        except Exception as e:
+            now = time.monotonic()
+            if now - self._last_watchdog_wait_warn_t > 2.0:
+                self._last_watchdog_wait_warn_t = now
+                self.get_logger().warn(
+                    f"FACTR UR7e {self.name}: RTDE watchdog kick failed while waiting "
+                    f"for leader match ({e}). The ExternalControl program may need "
+                    f"to be replayed."
+                )
+
+    def _on_start_pos_matched(self):
+        try:
+            self.rtde_c.kickWatchdog()
+        except Exception:
+            pass
 
     def _gripper_io_loop(self):
         """

@@ -21,6 +21,7 @@
 
 
 from threading import Lock
+import time
 from typing import Protocol, Sequence
 
 import numpy as np
@@ -37,6 +38,7 @@ from dynamixel_sdk.robotis_def import (
 )
 
 ADDR_TORQUE_ENABLE = 64
+ADDR_HARDWARE_ERROR_STATUS = 70
 ADDR_GOAL_CURRENT = 102
 LEN_GOAL_CURRENT = 2
 ADDR_PRESENT_POSITION = 132
@@ -139,12 +141,33 @@ class DynamixelDriver(DynamixelDriverProtocol):
         torque_value = TORQUE_ENABLE if enable else TORQUE_DISABLE
         with self._lock:
             for dxl_id in self._ids:
-                dxl_comm_result, dxl_error = self._packetHandler.write1ByteTxRx(
-                    self._portHandler, dxl_id, ADDR_TORQUE_ENABLE, torque_value
-                )
-                if dxl_comm_result != COMM_SUCCESS or dxl_error != 0:
-                    raise RuntimeError(f"Failed to set torque mode for Dynamixel with ID {dxl_id}")
+                self._write_torque_enable_with_recovery(dxl_id, torque_value)
         self._torque_enabled = enable
+
+    def _write_torque_enable_with_recovery(self, dxl_id: int, torque_value: int):
+        dxl_comm_result, dxl_error = self._packetHandler.write1ByteTxRx(
+            self._portHandler, dxl_id, ADDR_TORQUE_ENABLE, torque_value
+        )
+        if dxl_comm_result == COMM_SUCCESS and dxl_error == 0:
+            return
+
+        hw_status, hw_comm_result, _ = self._packetHandler.read1ByteTxRx(
+            self._portHandler, dxl_id, ADDR_HARDWARE_ERROR_STATUS
+        )
+        if hw_comm_result == COMM_SUCCESS and hw_status != 0:
+            print(
+                f"Dynamixel ID {dxl_id} has hardware error status {hw_status}; "
+                "rebooting once and retrying torque mode."
+            )
+            self._packetHandler.reboot(self._portHandler, dxl_id)
+            time.sleep(1.0)
+            dxl_comm_result, dxl_error = self._packetHandler.write1ByteTxRx(
+                self._portHandler, dxl_id, ADDR_TORQUE_ENABLE, torque_value
+            )
+            if dxl_comm_result == COMM_SUCCESS and dxl_error == 0:
+                return
+
+        raise RuntimeError(f"Failed to set torque mode for Dynamixel with ID {dxl_id}")
 
     def close(self):
         self._portHandler.closePort()

@@ -31,7 +31,8 @@ arm_teleop:
     calibration_joint_pos: [2.13, -0.058, 0.226, -1.69, -3.23, -6.11] 
     
     # Physically place the leader in this pose at launch.
-    initial_match_joint_pos: [1.64, -1.500, 1.29, -1.79, -1.56, -1.57]
+    # initial_match_joint_pos: [1.64, -1.500, 1.29, -1.79, -1.56, -1.57]
+    initial_match_joint_pos: [-1.5700, -1.5700, -1.5700, -1.5700, 1.5700, 0.0000]
 
 gripper_teleop:
   # max range (rad) of the leader gripper trigger

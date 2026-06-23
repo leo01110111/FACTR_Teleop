@@ -125,6 +125,7 @@ class FACTRTeleop(Node, ABC):
         self._get_dynamixel_offsets()
         # ensure the leader and the follower arms have the same joint positions before starting
         self._match_start_pos()
+        self._on_start_pos_matched()
         # start the control loop
         self.timer = self.create_timer(self.dt, self.control_loop_callback)
 
@@ -277,9 +278,21 @@ class FACTRTeleop(Node, ABC):
                 Current joint position: {curr_str}\n\
                 Gripper joint position (post-calibration): {curr_gripper_pos:.2f}"
             )
+            self._wait_during_start_pos_match(1.0)
             curr_pos, _, curr_gripper_pos, _ = self.get_leader_joint_states()
-            time.sleep(1)
         self.get_logger().info(f"FACTR TELEOP {self.name}: Initial joint position matched.")
+
+    def _wait_during_start_pos_match(self, duration):
+        deadline = time.monotonic() + duration
+        while time.monotonic() < deadline:
+            self._while_waiting_for_start_pos()
+            time.sleep(0.025)
+
+    def _while_waiting_for_start_pos(self):
+        pass
+
+    def _on_start_pos_matched(self):
+        pass
 
     def shut_down(self):
         """
