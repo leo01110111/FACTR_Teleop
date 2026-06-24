@@ -231,10 +231,10 @@ class DynamixelDriver(DynamixelDriverProtocol):
         return positions_in_radians, velocities_in_units
     
 
-    def set_current(self, currents: Sequence[float]):
+    def set_current(self, currents: Sequence[float], require_torque: bool = True):
         if len(currents) != len(self._ids):
             raise ValueError("The length of currents must match the number of servos")
-        if not self._torque_enabled:
+        if require_torque and not self._torque_enabled:
             raise RuntimeError("Torque must be enabled to set currents")
 
         currents = np.clip(currents, -900, 900)
@@ -256,6 +256,9 @@ class DynamixelDriver(DynamixelDriverProtocol):
     def set_torque(self, torques: Sequence[float]):
         currents = self.torque_to_current_map*torques
         self.set_current(currents)
+
+    def zero_current(self):
+        self.set_current(np.zeros(len(self._ids)), require_torque=False)
      
 
 def main():

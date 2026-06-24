@@ -12,7 +12,7 @@ dynamixel:
     "XL330_M077_T",
   ]
   # length 7 (all motors). Flip a sign during testing if a joint reads/drives backwards.
-  joint_signs: [1, 1, -1, 1, -1, -1, 1]
+  joint_signs: [1, 1, -1, 1, 1, 1, 1]
 
 arm_teleop:
   leader_urdf: "factr_teleop_ur5_gello.urdf"
@@ -28,7 +28,7 @@ arm_teleop:
   arm_joint_limits_safety_margin: 0.1
   initialization:
     #The joint angles of the UR when its in calibration stance.
-    calibration_joint_pos: [2.13, -0.058, 0.226, -1.69, -3.23, -6.11] 
+    calibration_joint_pos: [-2.2632, -3.0465, -0.0794, -1.5390, 3.1744, 0.0000]
     
     # Physically place the leader in this pose at launch.
     # initial_match_joint_pos: [1.64, -1.500, 1.29, -1.79, -1.56, -1.57]
@@ -46,13 +46,17 @@ gripper_teleop:
 controller:
   frequency: 500
   torque_feedback:
-    enable: True
+    # Disable while tuning leader calibration/gravity so UR wrench feedback does
+    # not feel like unexplained wrist resistance.
+    enable: False
     gain: 3.0
     damping: 0.0
     motor_scalar: 94.5652173913
   gravity_comp:
-    enable: True
-    gain: 0.85   # starting point — tune for the UR-GELLO leader once the URDF is in
+    enable: False
+    # Negative on the right leader: positive gain made the arm feel heavier.
+    # Tune by increasing magnitude, e.g. -0.4, -0.6, -0.85, after signs/offsets are stable.
+    gain: 0.0
   null_space_regulation:
     # Disabled: a 6-DOF arm doing a 6-DOF task is non-redundant (kp=kd=0 => no null-space torque).
     null_space_joint_target: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
@@ -60,7 +64,7 @@ controller:
     kd: 0.0
   static_friction_comp:
     enable_speed: 0.9
-    gain: 0.6
+    gain: 0.0
   joint_limit_barrier:
     kp: 1.03561658022
     kd: 0.04315069084
