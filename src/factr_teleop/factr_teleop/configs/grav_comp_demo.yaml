@@ -9,7 +9,7 @@ dynamixel:
     "XC330_T288_T", "XC330_T288_T", "XC330_T288_T", "XC330_T288_T",
   ]
   # Servo joint directions to match that of the leader arm
-  joint_signs: [1, 1, 1, -1, 1, 1, 1, -1]
+  joint_signs: [1, 1, 1, -1, 1, -1, 1, -1]
 
 arm_teleop:
   # URDF used for creating leader arm dynamics model to compute gravity compensation
