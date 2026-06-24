@@ -146,6 +146,17 @@ def _connect_external_control(robot_ip, frequency, ur_cap_port, timeout):
             time.sleep(min(2.0, remaining))
 
 
+def _cleanup_rtde_control(rtde_c):
+    for cleanup_name in ("stopScript", "disconnect"):
+        try:
+            getattr(rtde_c, cleanup_name)()
+        except Exception as exc:
+            print(
+                f"Warning: RTDE control cleanup {cleanup_name}() failed: "
+                f"{type(exc).__name__}: {exc}"
+            )
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Move a UR follower arm to the config's initial_match_joint_pos."
@@ -270,10 +281,7 @@ def main():
         if not ok:
             raise RuntimeError("RTDE moveJ returned False")
     finally:
-        try:
-            rtde_c.stopScript()
-        finally:
-            rtde_c.disconnect()
+        _cleanup_rtde_control(rtde_c)
 
     rtde_r = RTDEReceiveInterface(robot_ip)
     try:

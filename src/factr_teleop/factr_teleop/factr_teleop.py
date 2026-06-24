@@ -84,6 +84,10 @@ class FACTRTeleop(Node, ABC):
         self.arm_joint_limits_min = np.array(self.config["arm_teleop"]["arm_joint_limits_min"]) + self.safety_margin
         self.calibration_joint_pos = np.array(self.config["arm_teleop"]["initialization"]["calibration_joint_pos"])
         self.initial_match_joint_pos = np.array(self.config["arm_teleop"]["initialization"]["initial_match_joint_pos"])
+        self.normalize_leader_joint_angles = bool(
+            self.config["arm_teleop"]["initialization"].get("normalize_joint_angles", False)
+        )
+        self._leader_arm_pos_reference = None
         assert self.num_arm_joints == len(self.arm_joint_limits_max) == len(self.arm_joint_limits_min), \
             "num_arm_joints and the length of arm joint limits must be the same"
         assert self.num_arm_joints == len(self.calibration_joint_pos) == len(self.initial_match_joint_pos), \
@@ -255,12 +259,10 @@ class FACTRTeleop(Node, ABC):
         follower arm before the follower arm starts mirroring the leader arm. 
         """
         curr_pos, _, curr_gripper_pos, _ = self.get_leader_joint_states()
-        while np.any(
-            np.abs(curr_pos - self.initial_match_joint_pos[0:self.num_arm_joints]) > 0.6
-        ):
-            per_joint_err = np.abs(
-                curr_pos - self.initial_match_joint_pos[0:self.num_arm_joints]
-            )
+        while np.linalg.norm(curr_pos - self.initial_match_joint_pos[0:self.num_arm_joints]) > 0.6:
+            joint_pos_error = curr_pos - self.initial_match_joint_pos[0:self.num_arm_joints]
+            current_joint_error = np.linalg.norm(joint_pos_error)
+            per_joint_err = np.abs(joint_pos_error)
             match_str = np.array2string(
                 self.initial_match_joint_pos[0:self.num_arm_joints],
                 precision=2, floatmode="fixed", separator=", ",
@@ -272,13 +274,14 @@ class FACTRTeleop(Node, ABC):
                 per_joint_err, precision=2, floatmode="fixed", separator=", ",
             )
             self.get_logger().info(
-                f"FACTR TELEOP {self.name}: Please match starting joint pos. Per-joint error (limit 0.6): {err_str}\n\
+                f"FACTR TELEOP {self.name}: Please match starting joint pos. Current error: {current_joint_error:.2f}\n\
+                Per-joint error: {err_str}\n\
                 Initial match joint position: {match_str}\n\
                 Current joint position: {curr_str}\n\
                 Gripper joint position (post-calibration): {curr_gripper_pos:.2f}"
             )
             curr_pos, _, curr_gripper_pos, _ = self.get_leader_joint_states()
-            time.sleep(1)
+            time.sleep(0.5)
         self.get_logger().info(f"FACTR TELEOP {self.name}: Initial joint position matched.")
 
     def shut_down(self):
@@ -287,6 +290,22 @@ class FACTRTeleop(Node, ABC):
         """
         self.set_leader_joint_torque(np.zeros(self.num_arm_joints), 0.0)
         self.driver.set_torque_mode(False)
+
+    def _normalize_leader_arm_pos(self, joint_pos_arm):
+        if not self.normalize_leader_joint_angles:
+            return joint_pos_arm
+
+        if self._leader_arm_pos_reference is None:
+            reference = self.initial_match_joint_pos[0:self.num_arm_joints]
+        else:
+            reference = self._leader_arm_pos_reference
+
+        joint_pos_arm = reference + np.arctan2(
+            np.sin(joint_pos_arm - reference),
+            np.cos(joint_pos_arm - reference),
+        )
+        self._leader_arm_pos_reference = joint_pos_arm.copy()
+        return joint_pos_arm
 
     def get_leader_joint_states(self):
         """
@@ -298,6 +317,7 @@ class FACTRTeleop(Node, ABC):
         joint_pos_arm = (
             joint_pos[0:self.num_arm_joints] - self.joint_offsets[0:self.num_arm_joints]
         ) * self.joint_signs[0:self.num_arm_joints]
+        joint_pos_arm = self._normalize_leader_arm_pos(joint_pos_arm)
         self.gripper_pos = (joint_pos[-1] - self.joint_offsets[-1]) * self.joint_signs[-1]
         joint_vel_arm = joint_vel[0:self.num_arm_joints] * self.joint_signs[0:self.num_arm_joints]
         
