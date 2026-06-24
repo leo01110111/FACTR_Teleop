@@ -132,7 +132,7 @@ class FACTRTeleop(Node, ABC):
             self._get_dynamixel_offsets()
             self._match_start_pos()
             self.get_logger().info("Leader match only complete; exiting.")
-            self.driver.zero_current()
+            self.set_leader_joint_torque(np.zeros(self.num_arm_joints), 0.0)
             self.driver.set_torque_mode(False)
             self.timer = None
             return
@@ -143,8 +143,6 @@ class FACTRTeleop(Node, ABC):
         self._get_dynamixel_offsets()
         # ensure the leader and the follower arms have the same joint positions before starting
         self._match_start_pos()
-        self.driver.set_torque_mode(True)
-        self.driver.zero_current()
         # start the control loop
         self.timer = self.create_timer(self.dt, self.control_loop_callback)
 
@@ -186,10 +184,8 @@ class FACTRTeleop(Node, ABC):
         self.driver.set_torque_mode(False)
         # set operating mode to current mode
         self.driver.set_operating_mode(0)
-        # Current commands persist in Dynamixel RAM across torque toggles. Clear
-        # them before enabling torque so an interrupted prior run cannot leave a
-        # joint pushing as soon as startup completes.
-        self.driver.zero_current()
+        # enable torque
+        self.driver.set_torque_mode(True)
 
     def _prepare_inverse_dynamics(self):
         """
