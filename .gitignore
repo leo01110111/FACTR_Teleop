@@ -11,4 +11,6 @@ __pycache__/
 raw_data
 
 # misc
-.vscode/
+.vscode/*
+# but share the extension recommendations with everyone who clones the repo
+!.vscode/extensions.json
