@@ -367,6 +367,10 @@ class FACTRTeleopUR7e(FACTRTeleop):
 def main(args=None):
     rclpy.init(args=args)
     factr_teleop_ur7e = FACTRTeleopUR7e()
+    if getattr(factr_teleop_ur7e, "leader_match_only", False):
+        factr_teleop_ur7e.destroy_node()
+        rclpy.shutdown()
+        return
 
     try:
         while rclpy.ok():
