@@ -6,14 +6,13 @@ dynamixel:
   # Arm 1 = FTBEO9N7. Arm 2 = FTBEO91I (currently connected as ttyUSB0).
   dynamixel_port: "usb-FTDI_USB__-__Serial_Converter_FTBEO91I-if00-port0"
   # 7 motors: 6 arm joints (XC330-T288-T) + 1 gripper (XL330-M077-T)
-  # 7 motors: 6 arm joints (XC330-T288-T) + 1 gripper (XL330-M077-T)
   servo_types: [
     "XC330_T288_T", "XC330_T288_T", "XC330_T288_T",
     "XC330_T288_T", "XC330_T288_T", "XC330_T288_T",
     "XL330_M077_T",
   ]
   # length 7 (all motors). Flip a sign during testing if a joint reads/drives backwards.
-  joint_signs: [1, 1, -1, 1, 1, 1, -1]
+  joint_signs: [1, 1, -1, 1, -1, -1, -1]
 
 arm_teleop:
   leader_urdf: "factr_teleop_ur5_gello.urdf"
@@ -32,7 +31,8 @@ arm_teleop:
     calibration_joint_pos: [2.13, -0.058, 0.226, -1.69, -3.23, -6.11] 
     
     # Physically place the leader in this pose at launch.
-    initial_match_joint_pos: [1.64, -1.500, 1.29, -1.79, -1.56, -1.57]
+    # initial_match_joint_pos: [1.64, -1.500, 1.29, -1.79, -1.56, -1.57]
+    initial_match_joint_pos: [-1.5700, -1.5700, -1.5700, -1.5700, 1.5700, 0.0000]
 
 gripper_teleop:
   # max range (rad) of the leader gripper trigger
@@ -68,6 +68,6 @@ controller:
     kp: 1.03561658022
     kd: 0.04315069084
   gripper_feedback:
-    enable: True
+    enable: False
     ema_beta: 0.9
     gain: 1.5
