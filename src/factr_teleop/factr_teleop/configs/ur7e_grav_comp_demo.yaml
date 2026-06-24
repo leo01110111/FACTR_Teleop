@@ -1,11 +1,23 @@
-name: right
+# ---------------------------------------------------------------------------
+# Gravity-compensation demo config for the UR7e GELLO leader arm.
+#
+# Runs gravity compensation (and friction/joint-limit barriers) on the leader
+# arm ONLY -- there is no follower UR connected and no force/gripper feedback.
+# Use it to verify the leader arm floats nicely before doing full teleop.
+#
+#   ros2 launch launch/factr_teleop_grav_comp_demo.py
+#
+# Mirrors ur7e_leader_left.yaml's hardware/kinematics, but disables every path
+# that needs a follower (torque_feedback, gripper_feedback), like
+# grav_comp_demo.yaml does for the Franka leader.
+# ---------------------------------------------------------------------------
+
+name: left
 
 dynamixel:
-  leader_name: "UR7e_right_leader"
+  leader_name: "UR7e_left_leader"
   # by-id basename only — the code prepends "/dev/serial/by-id/"
-  # Arm 1 = FTBEO9N7. Arm 2 = FTBEO91I (currently connected as ttyUSB0).
-  dynamixel_port: "usb-FTDI_USB__-__Serial_Converter_FTBEO91I-if00-port0"
-  # 7 motors: 6 arm joints (XC330-T288-T) + 1 gripper (XL330-M077-T)
+  dynamixel_port: "usb-FTDI_USB__-__Serial_Converter_FTBEO9N7-if00-port0"
   # 7 motors: 6 arm joints (XC330-T288-T) + 1 gripper (XL330-M077-T)
   servo_types: [
     "XC330_T288_T", "XC330_T288_T", "XC330_T288_T",
@@ -13,45 +25,36 @@ dynamixel:
     "XL330_M077_T",
   ]
   # length 7 (all motors). Flip a sign during testing if a joint reads/drives backwards.
-  joint_signs: [1, 1, -1, 1, 1, 1, -1]
+  joint_signs: [1, 1, -1, 1, 1, 1, 1]
 
 arm_teleop:
   leader_urdf: "factr_teleop_ur5_gello.urdf"
-  #For the follower arm (UR servoJ params, read from arm_teleop.servo)
-  servo:
-    lookahead_time: 0.1
-    gain: 300.0
-    watchdog_min_frequency: 20.0
   num_arm_joints: 6
   # UR e-series joints: +/- 2*pi (+/- 360 deg). Tighten if the GELLO's range is smaller.
   arm_joint_limits_max: [6.2832, 6.2832, 6.2832, 6.2832, 6.2832, 6.2832]
   arm_joint_limits_min: [-6.2832, -6.2832, -6.2832, -6.2832, -6.2832, -6.2832]
   arm_joint_limits_safety_margin: 0.1
   initialization:
-    #The joint angles of the UR when its in calibration stance.
-    calibration_joint_pos: [2.13, -0.058, 0.226, -1.69, -3.23, -6.11] 
-    
+    # The joint angles of the UR when its in calibration stance.
+    calibration_joint_pos: [2.13, -0.058, 0.226, -1.69, -3.23, -6.11]
     # Physically place the leader in this pose at launch.
     initial_match_joint_pos: [1.64, -1.500, 1.29, -1.79, -1.56, -1.57]
 
 gripper_teleop:
   # max range (rad) of the leader gripper trigger
   actuation_range: 0.9
-  speed: 255
-  force: 128
-  # 255 is closed 0 is open for robotiq 2f-85 grippr
-  invert: True
 
 controller:
   frequency: 500
   torque_feedback:
-    enable: True
+    # No follower UR in the demo -> no haptic feedback.
+    enable: False
     gain: 3.0
     damping: 0.0
     motor_scalar: 94.5652173913
   gravity_comp:
     enable: True
-    gain: 0.85   # starting point — tune for the UR-GELLO leader once the URDF is in
+    gain: 2   # starting point — tune for the UR-GELLO leader
   null_space_regulation:
     # Disabled: a 6-DOF arm doing a 6-DOF task is non-redundant (kp=kd=0 => no null-space torque).
     null_space_joint_target: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
@@ -68,6 +71,5 @@ controller:
     kp: 1.03561658022
     kd: 0.04315069084
   gripper_feedback:
-    enable: True
-    ema_beta: 0.9
-    gain: 1.5
+    # No follower gripper in the demo.
+    enable: False

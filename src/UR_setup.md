@@ -171,8 +171,27 @@ The exact sequence that works, with the gotchas that bite in practice.
   direct subnet (`192.168.1.2/24`) and cabled to PC NIC `enp209s0f1np1`
   (`192.168.1.100/24`), not the building LAN.
 
-- **`dialout` permission error opening the U2D2** — the shell isn't in `dialout`.
-  Use a fresh login shell or the `sg dialout -c '...'` wrapper above.
+- **`dialout` permission error opening the U2D2** — your user isn't in the
+  `dialout` group (the U2D2 serial device `/dev/ttyUSB*` is `root:dialout`, mode
+  `crw-rw----`, so only `root` and the `dialout` group can open it).
+
+  **Permanent fix** (do once per machine/user):
+  ```
+  sudo usermod -aG dialout "$USER"   # add yourself to the group
+  ```
+  Group membership only applies to **new login sessions**, so after running it
+  you must **fully log out and back in** (or reboot). Verify it took:
+  ```
+  id -nG | grep -o dialout           # should print: dialout
+  ls -l /dev/ttyUSB0                 # should show group 'dialout' with rw (crw-rw----)
+  ```
+  Once `id -nG` shows `dialout`, you can launch without any wrapper, and
+  `run_factr_left.sh` runs the node directly.
+
+  **No-relogin workaround** (for a shell opened *before* you were added, or a
+  stale terminal): run the command in a `dialout` subshell —
+  `sg dialout -c '...'` (as used in the launch commands above). This grants the
+  group for that one command only; the permanent fix above is preferred.
 
 - **Serial port busy** — close `viz_pose_slider.py` / `leader_readout.py` first;
   they hold the U2D2 and block the node.

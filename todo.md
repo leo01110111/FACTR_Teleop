@@ -1,0 +1,8 @@
+- [x] Fix force feedback
+  - Found that when the end effector is pushed, the base joint can regardless if the trigger is held still, making the UR as well.
+    - Force feedback won't work untill we do a hardware re-design.
+- [ ] make safety plane ground more lenient 
+- [ ] up the threshold for collision
+- [ ] Feel which joints need to be strengthened for hardware redesign
+- [ ] Gravity comp: motor's weak or faulty URDF? 
+- [ ] Hardware redesign 

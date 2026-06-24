@@ -39,7 +39,7 @@ gripper_teleop:
   speed: 255
   force: 128
   # 255 is closed 0 is open for robotiq 2f-85 grippr
-  invert: False
+  invert: True
 
 controller:
   frequency: 500

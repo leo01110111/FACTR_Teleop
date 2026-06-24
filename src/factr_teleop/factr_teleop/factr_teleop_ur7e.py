@@ -267,6 +267,13 @@ class FACTRTeleopUR7e(FACTRTeleop):
         """
         q = np.array(self.rtde_r.getActualQ())
         wrench = np.array(self.rtde_r.getActualTCPForce())          # (6,) base frame [F; T]
+        # Negate the wrench for haptic feedback. With the raw sign, J^T @ wrench
+        # drives the leader in the same direction as an external push on the
+        # follower (assistive -- the arm "runs away" toward the pusher). Haptic
+        # feedback must *oppose* the push so the operator feels resistance, so
+        # flip the sign here. (The wrench observation in update_communication is
+        # negated to match this same sign convention.)
+        wrench = -wrench
         J = pin.computeFrameJacobian(
             self.pin_model, self.pin_data, q,
             self.ee_frame_id, pin.ReferenceFrame.LOCAL_WORLD_ALIGNED,
@@ -317,10 +324,14 @@ class FACTRTeleopUR7e(FACTRTeleop):
         self.cmd_ur_pos_pub.publish(create_array_msg(leader_arm_pos))
         self.cmd_gripper_pos_pub.publish(create_array_msg([gripper_cmd_255]))
         self.obs_ur_state_pub.publish(create_array_msg(self.rtde_r.getActualQ()))
-        # Raw TCP wrench (base frame [Fx,Fy,Fz,Tx,Ty,Tz]) as an always-on force
+        # TCP wrench (base frame [Fx,Fy,Fz,Tx,Ty,Tz]) as an always-on force
         # observation -- cheap streamed read, no Jacobian, no dependence on the
-        # feedback flag. This is the force signal to train policies on.
-        self.obs_ur_wrench_pub.publish(create_array_msg(self.rtde_r.getActualTCPForce()))
+        # feedback flag. This is the force signal to train policies on. Negated to
+        # match the haptic sign convention (see get_leader_arm_external_joint_torque):
+        # the published wrench is the external force acting *on* the follower, so a
+        # push registers in the direction of the push.
+        obs_wrench = -np.array(self.rtde_r.getActualTCPForce())
+        self.obs_ur_wrench_pub.publish(create_array_msg(obs_wrench.tolist()))
         # Follower gripper [position, current] in raw Robotiq 0..255 units, cached
         # by the gripper thread (values stay at 0 if no gripper is connected).
         self.obs_gripper_pub.publish(create_array_msg(
