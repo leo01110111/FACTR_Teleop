@@ -12,7 +12,7 @@ dynamixel:
     "XL330_M077_T",
   ]
   # length 7 (all motors). Flip a sign during testing if a joint reads/drives backwards.
-  joint_signs: [1, 1, -1, 1, -1, -1, -1]
+  joint_signs: [1, 1, -1, 1, -1, -1, 1]
 
 arm_teleop:
   leader_urdf: "factr_teleop_ur5_gello.urdf"
