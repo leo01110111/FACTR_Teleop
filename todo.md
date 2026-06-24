@@ -10,8 +10,11 @@ Leo
 - [ ] Hardware redesign 
 
 Sri
-- [] Add joint normalization to leader arms when deploying script so that we don't have to rotate all joints to match the initial joint position
-- [] Ensure smooth teleop of the right arm, right now there's some very weird jerky motion for some reason
-- [] Revert the norm change of the joint position deltas before follower movement so that we can ensure that it's below some threshold
+
+priority: figure out root cause of issue with motor 2, i think we need to definitely swap it out for a new xc330, not sure why it's so unstable. 
+
+- [x] Add joint normalization to leader arms when deploying script so that we don't have to rotate all joints to match the initial joint position
+- [x] Ensure smooth teleop of the right arm, right now there's some very weird jerky motion for some reason
+- [x] Revert the norm change of the joint position deltas before follower movement so that we can ensure that it's below some threshold
 - [] Implement force feedback on the right arm
 - [] Implement gravity compensation on the right arm
