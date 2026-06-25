@@ -333,7 +333,6 @@ class FACTRTeleopUR7e(FACTRTeleop):
         # and clamp. This bounds the steady current so the motor cannot overload.
         torque_cap = self.gripper_current_limit_ma / self.driver.torque_to_current_map[-1]
         self._grasp_torque = float(np.clip(self._grasp_torque, -torque_cap, torque_cap))
-        print(f"obj: {obj}, grasp_torque: {self._grasp_torque:.4f}, release_count: {self._grasp_release_count}")
         return self._grasp_torque
 
     # ----------------------------------------------------------- command stream

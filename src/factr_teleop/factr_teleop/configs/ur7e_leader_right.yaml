@@ -53,7 +53,7 @@ controller:
   gravity_comp:
     enable: True
     # Per-joint gains: [base, shoulder, elbow, wrist1, wrist2, wrist3].
-    gain: [2.0, 4.0, -3.0, -2.0, 0.85, 0.85]
+    gain: [2.0, 4.0, -3.0, -3.0, 0.85, 0.85]
   null_space_regulation:
     # Disabled: a 6-DOF arm doing a 6-DOF task is non-redundant (kp=kd=0 => no null-space torque).
     null_space_joint_target: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]

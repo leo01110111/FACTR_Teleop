@@ -8,6 +8,8 @@ arm motors. It does not connect RTDE, start ROS, move the follower, or apply
 force feedback.
 
 Usage:
+    python leader_grav_comp_test.py ur7e_leader_left.yaml
+    python leader_grav_comp_test.py ur7e_leader_right.yaml
     python leader_grav_comp_test.py ur7e_leader_right.yaml --gain -0.5
     python leader_grav_comp_test.py ur7e_leader_right.yaml --gains-file leader_grav_comp_gains_right.yaml
     python leader_grav_comp_test.py ur7e_leader_right.yaml --gains 0 0 -1.0 0 0 0
@@ -97,13 +99,15 @@ def load_gain_vector(args, config, num_arm_joints):
         gains = args.gains
         source = "--gains"
     else:
-        scalar_gain = (
-            float(args.gain)
-            if args.gain is not None
-            else float(config["controller"]["gravity_comp"]["gain"])
-        )
-        gains = [scalar_gain] * num_arm_joints
-        source = "--gain/config scalar"
+        if args.gain is not None:
+            gains = [float(args.gain)] * num_arm_joints
+            source = "--gain scalar"
+        else:
+            gains = config["controller"]["gravity_comp"]["gain"]
+            source = "config controller.gravity_comp.gain"
+            if not isinstance(gains, (list, tuple)):
+                gains = [float(gains)] * num_arm_joints
+                source += " scalar"
 
     gains = np.array(gains, dtype=float)
     if gains.shape != (num_arm_joints,):
