@@ -20,6 +20,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description():
@@ -36,6 +37,11 @@ def generate_launch_description():
         default_value="factr_teleop_ur7e",
         description="ROS node name (use distinct names for dual-arm).",
     )
+    leader_match_only_arg = DeclareLaunchArgument(
+        "leader_match_only",
+        default_value="false",
+        description="Only print leader start-match errors and exit after matching.",
+    )
 
     factr_teleop_ur7e = Node(
         package="factr_teleop",
@@ -45,11 +51,18 @@ def generate_launch_description():
         emulate_tty=True,
         parameters=[
             {"config_file": LaunchConfiguration("config_file")},
+            {
+                "leader_match_only": ParameterValue(
+                    LaunchConfiguration("leader_match_only"),
+                    value_type=bool,
+                )
+            },
         ],
     )
 
     return LaunchDescription([
         config_file_arg,
         node_name_arg,
+        leader_match_only_arg,
         factr_teleop_ur7e,
     ])

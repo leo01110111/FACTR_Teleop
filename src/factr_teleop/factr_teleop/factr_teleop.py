@@ -67,6 +67,9 @@ class FACTRTeleop(Node, ABC):
         super().__init__('factr_teleop')
 
         config_file_name = self.declare_parameter('config_file', '').get_parameter_value().string_value
+        self.leader_match_only = self.declare_parameter(
+            'leader_match_only', False
+        ).get_parameter_value().bool_value
         config_path = os.path.join(get_workspace_root(), f"src/factr_teleop/factr_teleop/configs/{config_file_name}")
         with open(config_path, 'r') as config_file:
             self.config = yaml.safe_load(config_file)
@@ -84,6 +87,12 @@ class FACTRTeleop(Node, ABC):
         self.arm_joint_limits_min = np.array(self.config["arm_teleop"]["arm_joint_limits_min"]) + self.safety_margin
         self.calibration_joint_pos = np.array(self.config["arm_teleop"]["initialization"]["calibration_joint_pos"])
         self.initial_match_joint_pos = np.array(self.config["arm_teleop"]["initialization"]["initial_match_joint_pos"])
+        self.normalize_leader_joint_angles = bool(
+            self.config["arm_teleop"]["initialization"].get("normalize_joint_angles", False)
+        )
+        self._leader_arm_pos_reference = None
+        if self.normalize_leader_joint_angles:
+            self.get_logger().info("Leader joint angle normalization enabled.")
         assert self.num_arm_joints == len(self.arm_joint_limits_max) == len(self.arm_joint_limits_min), \
             "num_arm_joints and the length of arm joint limits must be the same"
         assert self.num_arm_joints == len(self.calibration_joint_pos) == len(self.initial_match_joint_pos), \
@@ -97,7 +106,7 @@ class FACTRTeleop(Node, ABC):
 
         # gravity comp
         self.enable_gravity_comp = self.config["controller"]["gravity_comp"]["enable"]
-        self.gravity_comp_modifier = self.config["controller"]["gravity_comp"]["gain"]
+        self.gravity_comp_modifier = np.asarray(self.config["controller"]["gravity_comp"]["gain"], dtype=float)
         self.tau_g = np.zeros(self.num_arm_joints)
         # friction comp
         self.stiction_comp_enable_speed = self.config["controller"]["static_friction_comp"]["enable_speed"]
@@ -118,9 +127,18 @@ class FACTRTeleop(Node, ABC):
         # gripper feedback
         self.enable_gripper_feedback = self.config["controller"]["gripper_feedback"]["enable"]
         
+        if self.leader_match_only:
+            self.get_logger().info("Leader match only: skipping follower communication.")
+            self._get_dynamixel_offsets()
+            self._match_start_pos()
+            self.get_logger().info("Leader match only complete; exiting.")
+            self.set_leader_joint_torque(np.zeros(self.num_arm_joints), 0.0)
+            self.driver.set_torque_mode(False)
+            self.timer = None
+            return
+
         # needs to be implemented to establish communication between the leader and the follower
         self.set_up_communication()
-
         # calibrate the leader arm joints before starting
         self._get_dynamixel_offsets()
         # ensure the leader and the follower arms have the same joint positions before starting
@@ -255,12 +273,14 @@ class FACTRTeleop(Node, ABC):
         follower arm before the follower arm starts mirroring the leader arm. 
         """
         curr_pos, _, curr_gripper_pos, _ = self.get_leader_joint_states()
-        while np.any(
-            np.abs(curr_pos - self.initial_match_joint_pos[0:self.num_arm_joints]) > 0.6
-        ):
-            per_joint_err = np.abs(
-                curr_pos - self.initial_match_joint_pos[0:self.num_arm_joints]
-            )
+        printed_match_status = False
+        while True:
+            joint_pos_error = curr_pos - self.initial_match_joint_pos[0:self.num_arm_joints]
+            current_joint_error = np.linalg.norm(joint_pos_error)
+            if current_joint_error <= 0.6:
+                break
+
+            per_joint_err = np.abs(joint_pos_error)
             match_str = np.array2string(
                 self.initial_match_joint_pos[0:self.num_arm_joints],
                 precision=2, floatmode="fixed", separator=", ",
@@ -271,14 +291,22 @@ class FACTRTeleop(Node, ABC):
             err_str = np.array2string(
                 per_joint_err, precision=2, floatmode="fixed", separator=", ",
             )
-            self.get_logger().info(
-                f"FACTR TELEOP {self.name}: Please match starting joint pos. Per-joint error (limit 0.6): {err_str}\n\
-                Initial match joint position: {match_str}\n\
-                Current joint position: {curr_str}\n\
-                Gripper joint position (post-calibration): {curr_gripper_pos:.2f}"
-            )
+            status_lines = [
+                f"Per-joint error: {err_str}",
+                f"Initial match joint position: {match_str}",
+                f"Current joint position: {curr_str}",
+                f"Gripper joint position (post-calibration): {curr_gripper_pos:.2f}",
+                f"Current error: {current_joint_error:.2f}",
+            ]
+            if printed_match_status:
+                print(f"\x1b[{len(status_lines)}A", end="")
+            for line in status_lines:
+                print(f"\r\x1b[2K{line}")
+            printed_match_status = True
             curr_pos, _, curr_gripper_pos, _ = self.get_leader_joint_states()
-            time.sleep(1)
+            time.sleep(0.5)
+        if printed_match_status:
+            print()
         self.get_logger().info(f"FACTR TELEOP {self.name}: Initial joint position matched.")
 
     def shut_down(self):
@@ -287,6 +315,22 @@ class FACTRTeleop(Node, ABC):
         """
         self.set_leader_joint_torque(np.zeros(self.num_arm_joints), 0.0)
         self.driver.set_torque_mode(False)
+
+    def _normalize_leader_arm_pos(self, joint_pos_arm):
+        if not self.normalize_leader_joint_angles:
+            return joint_pos_arm
+
+        if self._leader_arm_pos_reference is None:
+            reference = self.initial_match_joint_pos[0:self.num_arm_joints]
+        else:
+            reference = self._leader_arm_pos_reference
+
+        joint_pos_arm = reference + np.arctan2(
+            np.sin(joint_pos_arm - reference),
+            np.cos(joint_pos_arm - reference),
+        )
+        self._leader_arm_pos_reference = joint_pos_arm.copy()
+        return joint_pos_arm
 
     def get_leader_joint_states(self):
         """
@@ -298,6 +342,7 @@ class FACTRTeleop(Node, ABC):
         joint_pos_arm = (
             joint_pos[0:self.num_arm_joints] - self.joint_offsets[0:self.num_arm_joints]
         ) * self.joint_signs[0:self.num_arm_joints]
+        joint_pos_arm = self._normalize_leader_arm_pos(joint_pos_arm)
         self.gripper_pos = (joint_pos[-1] - self.joint_offsets[-1]) * self.joint_signs[-1]
         joint_vel_arm = joint_vel[0:self.num_arm_joints] * self.joint_signs[0:self.num_arm_joints]
         
