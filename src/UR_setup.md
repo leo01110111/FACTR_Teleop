@@ -203,9 +203,16 @@ The exact sequence that works, with the gotchas that bite in practice.
   `192.168.1.2:63352` from its own URScript), but the controller's iptables drops
   *external* inbound connections to `63352` while allowing the built-in UR ports
   (`29999`, `30001-30004`, ...). Fix: install the patched gripper URCap
-  **`Robotiq_Grippers-1.8.13-factrfw.urcap`**, which is stock UCG-1.8.13 with one
-  change — its root-run daemon launcher (`robotiq_2f_gripper_driver.sh`) adds
-  `iptables -I INPUT -p tcp --dport 63352 -j ACCEPT` at startup. Legacy `.urcap`
+  **`Robotiq_Grippers-1.8.13-factrfw4.urcap`**, which is stock UCG-1.8.13 with one
+  edited file — its root-run daemon launcher (`robotiq_2f_gripper_driver.sh`) runs
+  a background watchdog that keeps `iptables -I INPUT -p tcp --dport 63352 -j
+  ACCEPT` (plus an `ESTABLISHED,RELATED` ACCEPT) at the **top** of the INPUT chain
+  once per second. A one-shot rule is not enough: PolyScope re-applies its own
+  firewall on events (pressing Play, mode changes) and inserts a DROP *above* our
+  ACCEPT, shadowing it — the watchdog re-asserts our rule at the top so it wins,
+  and the conntrack rule keeps an already-open gripper socket alive across a reset.
+  (Don't use `iptables -C` to gate the re-insert: it checks existence, not
+  position, so it passes on a shadowed rule and never fixes it.) Legacy `.urcap`
   bundles are unsigned on PolyScope 5.x, so it repackages without re-signing.
   After install + PolyScope restart, verify from the PC:
   ```
