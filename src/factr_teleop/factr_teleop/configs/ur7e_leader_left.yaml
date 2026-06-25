@@ -49,7 +49,7 @@ controller:
     damping: 0.0
     motor_scalar: 94.5652173913
   gravity_comp:
-    enable: True
+    enable: False
     gain: 2   # starting point — tune for the UR-GELLO leader once the URDF is in
   null_space_regulation:
     # Disabled: a 6-DOF arm doing a 6-DOF task is non-redundant (kp=kd=0 => no null-space torque).
@@ -58,7 +58,7 @@ controller:
     kd: 0.0
   static_friction_comp:
     enable_speed: 0.9
-    gain: 0.6
+    gain: 0
   joint_limit_barrier:
     kp: 1.03561658022
     kd: 0.04315069084
@@ -69,4 +69,9 @@ controller:
   gripper_feedback:
     enable: True
     ema_beta: 0.9
-    gain: 1.5
+    # On/off grasp-feedback torque magnitude (clamped by current_limit_ma below).
+    magnitude: 0.2
+    # Hard cap on the trigger (XL330-M077) motor current in mA. Continuous/rated
+    # is ~250 mA (~20% of stall); above that the motor overloads since it pushes
+    # against the operator's finger continuously. Enforced in software (gripper_feedback).
+    current_limit_ma: 250

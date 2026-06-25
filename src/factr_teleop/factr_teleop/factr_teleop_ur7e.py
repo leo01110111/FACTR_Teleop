@@ -66,6 +66,11 @@ class RobotiqGripper:
     def get_current(self):
         return self._get_var("COU")  # motor current 0..255 (grasp-force proxy)
 
+    def get_object(self):
+        # object-detection status: 0 moving, 1 stopped-on-contact while opening,
+        # 2 stopped-on-contact while closing (a grasp), 3 reached requested position.
+        return self._get_var("OBJ")
+
     def close(self):
         try:
             self._sock.close()
@@ -90,8 +95,14 @@ class FACTRTeleopUR7e(FACTRTeleop):
         # Only needed if force-feedback to the leader gripper is enabled. Use
         # .get() so the demo/teleop configs that disable it need not carry gains.
         gf = self.config["controller"]["gripper_feedback"]
-        self.gripper_feedback_gain = gf.get("gain", 1.0) #.get is used to prevent key error if they aren't configured.
+        # On/off grasp-feedback torque magnitude (before the current cap below).
+        self.gripper_feedback_magnitude = gf.get("magnitude", 0.2)
         self.gripper_torque_ema_beta = gf.get("ema_beta", 0.9)
+        # Hard cap on the trigger (XL330-M077) motor current, in mA. Its continuous
+        # (rated) torque is only ~20% of stall (~250 mA); sustained current above
+        # that overloads the motor since the trigger must push continuously against
+        # the operator's finger. Capped on the FACTR side (see gripper_feedback).
+        self.gripper_current_limit_ma = gf.get("current_limit_ma", 250.0)
         # Timestamp of the previous servoJ call, used to measure the real control
         # period for servoJ's `time` argument (see update_communication).
         self._last_servo_t = None
@@ -209,6 +220,9 @@ class FACTRTeleopUR7e(FACTRTeleop):
         self._follower_gripper_pos_255 = 0      # raw Robotiq 0..255 (cached for logging)
         self._follower_gripper_current_255 = 0  # raw Robotiq 0..255 (cached for logging)
         self._follower_gripper_current = 0.0    # normalized 0..1 EMA (cached for feedback)
+        self._follower_gripper_obj = 3          # Robotiq OBJ status (3 = no object held)
+        self._grasp_torque = 0.0                # latched gripper-feedback torque
+        self._grasp_release_count = 0           # consecutive "no object" cycles seen
         if self.enable_follower_gripper:
             try:
                 self.gripper = RobotiqGripper(self.robot_ip, self.gripper_port)
@@ -241,6 +255,8 @@ class FACTRTeleopUR7e(FACTRTeleop):
                 self._follower_gripper_pos_255 = self.gripper.get_position()
                 cur255 = self.gripper.get_current()
                 self._follower_gripper_current_255 = cur255
+                # Object-detection status, used to gate feedback to real grasps only.
+                self._follower_gripper_obj = self.gripper.get_object()
                 # EMA on normalized current, consumed only by the haptic feedback path.
                 self._follower_gripper_current = self.gripper_torque_ema_beta * (self._follower_gripper_current) \
                     + (1.0 - self.gripper_torque_ema_beta) * (cur255 / 255.0)
@@ -288,9 +304,37 @@ class FACTRTeleopUR7e(FACTRTeleop):
         return self._follower_gripper_current
 
     def gripper_feedback(self, leader_gripper_pos, leader_gripper_vel, gripper_feedback):
-        # Resist the leader trigger in proportion to the follower's grasp force.
-        torque_gripper = -1.0 * gripper_feedback / self.gripper_feedback_gain
-        return torque_gripper
+        # Only render force when the follower has stopped ON AN OBJECT (Robotiq OBJ
+        # status). Trigger convention: 0 = closed, ~0.9 = open. Empirically a
+        # POSITIVE motor torque drives the trigger toward 0 (closed), so the
+        # "resist closing" direction we want on a grasp -- pushing the trigger
+        # toward OPEN -- is NEGATIVE.
+        #   OBJ == 2 -> stopped while CLOSING on an object (grasp): resist further
+        #               closing -> push trigger toward OPEN -> negative.
+        #   OBJ == 1 -> stopped while OPENING on an object: push toward CLOSED ->
+        #               positive.
+        #   OBJ 0/3  -> moving / reached commanded position, no object: no feedback.
+        magnitude = self.gripper_feedback_magnitude
+        RELEASE_DEBOUNCE = 40  # OBJ must read 0/3 this many cycles before releasing
+        obj = self._follower_gripper_obj
+        if obj == 2:                       # grasp while closing
+            self._grasp_torque = magnitude
+            self._grasp_release_count = 0
+        elif obj == 1:                     # grasp while opening
+            self._grasp_torque = -magnitude
+            self._grasp_release_count = 0
+        elif self._grasp_torque != 0.0:    # OBJ 0/3 while a grasp is latched: debounce
+            self._grasp_release_count += 1
+            if self._grasp_release_count >= RELEASE_DEBOUNCE:
+                self._grasp_torque = 0.0
+                self._grasp_release_count = 0
+        # Cap the trigger current (FACTR side): convert the configured mA limit to a
+        # torque cap via the gripper motor's torque->current map (mA per torque unit)
+        # and clamp. This bounds the steady current so the motor cannot overload.
+        torque_cap = self.gripper_current_limit_ma / self.driver.torque_to_current_map[-1]
+        self._grasp_torque = float(np.clip(self._grasp_torque, -torque_cap, torque_cap))
+        print(f"obj: {obj}, grasp_torque: {self._grasp_torque:.4f}, release_count: {self._grasp_release_count}")
+        return self._grasp_torque
 
     # ----------------------------------------------------------- command stream
     def update_communication(self, leader_arm_pos, leader_gripper_pos):

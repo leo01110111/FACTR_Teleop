@@ -401,7 +401,7 @@ class FACTRTeleop(Node, ABC):
         exceed_min_mask = arm_joint_pos < self.arm_joint_limits_min
         tau_l += (-self.joint_limit_kp * (arm_joint_pos - self.arm_joint_limits_min) \
             - self.joint_limit_kd * arm_joint_vel) * exceed_min_mask
-        
+        """
         if gripper_joint_pos > self.gripper_limit_max:
             tau_l_gripper = -self.joint_limit_kp * (gripper_joint_pos - self.gripper_limit_max) \
                 - self.joint_limit_kd * gripper_joint_vel
@@ -410,6 +410,8 @@ class FACTRTeleop(Node, ABC):
                 - self.joint_limit_kd * gripper_joint_vel
         else:
             tau_l_gripper = 0.0
+            """
+        tau_l_gripper = 0.0
         return tau_l, tau_l_gripper
 
     def gravity_compensation(self, arm_joint_pos, arm_joint_vel):
