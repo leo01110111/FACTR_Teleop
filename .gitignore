@@ -14,3 +14,4 @@ raw_data
 .vscode/*
 # but share the extension recommendations with everyone who clones the repo
 !.vscode/extensions.json
+AGENTS.md

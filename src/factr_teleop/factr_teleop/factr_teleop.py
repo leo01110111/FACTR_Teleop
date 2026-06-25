@@ -106,7 +106,7 @@ class FACTRTeleop(Node, ABC):
 
         # gravity comp
         self.enable_gravity_comp = self.config["controller"]["gravity_comp"]["enable"]
-        self.gravity_comp_modifier = self.config["controller"]["gravity_comp"]["gain"]
+        self.gravity_comp_modifier = np.asarray(self.config["controller"]["gravity_comp"]["gain"], dtype=float)
         self.tau_g = np.zeros(self.num_arm_joints)
         # friction comp
         self.stiction_comp_enable_speed = self.config["controller"]["static_friction_comp"]["enable_speed"]

@@ -46,15 +46,14 @@ gripper_teleop:
 controller:
   frequency: 500
   torque_feedback:
-    enable: False
+    enable: True
     gain: 3.0
     damping: 0.0
     motor_scalar: 94.5652173913
   gravity_comp:
-    enable: False
-    # Negative on the right leader: positive gain made the arm feel heavier.
-    # Tune by increasing magnitude, e.g. -0.4, -0.6, -0.85, after signs/offsets are stable.
-    gain: -0.0
+    enable: True
+    # Per-joint gains: [base, shoulder, elbow, wrist1, wrist2, wrist3].
+    gain: [2.0, 4.0, -3.0, -2.0, 0.85, 0.85]
   null_space_regulation:
     # Disabled: a 6-DOF arm doing a 6-DOF task is non-redundant (kp=kd=0 => no null-space torque).
     null_space_joint_target: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
