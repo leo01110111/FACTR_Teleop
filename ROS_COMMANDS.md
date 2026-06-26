@@ -217,6 +217,64 @@ ros2 launch launch/factr_teleop_ur7e.py \
 For shadow mode, run the same teleop command without `collision_safety:=true`
 so normal FACTR motion continues while the RMPFlow stream is observed.
 
+## Bimanual UR7e With Isaac Sim 6 / cuMotion RMPFlow Stream
+
+This is the parallel Isaac Sim 6 backend. It reuses the same ROS bridge and
+FACTR teleop nodes, but swaps Terminal 1 from the Isaac 5.1 Lula server to the
+Isaac 6 cuMotion server. Keep the endpoint pair separate from the 5.1 path.
+
+Terminal 1, Isaac 6 / cuMotion:
+
+```bash
+cd /home/srianumakonda/FACTR_Teleop
+
+bash scripts/isaac_cumotion/run_cumotion_stream_server.sh \
+  --mode rmp \
+  --input-endpoint tcp://127.0.0.1:5568 \
+  --output-endpoint tcp://127.0.0.1:5569 \
+  --loop-hz 500.0 \
+  --stale-input-timeout-s 5.0 \
+  --policy-sides left,right \
+  --dynamic-other-arm-obstacles \
+  --require-other-arm-state
+```
+
+Terminal 2, ROS stream bridge:
+
+```bash
+cd /home/srianumakonda/FACTR_Teleop
+source ./factr_conda_env
+source install/setup.bash
+
+ros2 launch launch/isaac_rmpflow_stream_bridge.py \
+  active_sides:=left,right \
+  input_endpoint:=tcp://127.0.0.1:5568 \
+  output_endpoint:=tcp://127.0.0.1:5569 \
+  publish_hz:=150.0 \
+  publish_safe_targets:=true \
+  safe_response_timeout_s:=5.0 \
+  hold_stale_state:=true \
+  hold_stale_desired:=true
+```
+
+Terminals 3 and 4 are unchanged from the bimanual FACTR teleop workflow:
+
+```bash
+ros2 launch launch/factr_teleop_ur7e.py \
+  config_file:=ur7e_leader_left.yaml \
+  node_name:=factr_teleop_ur7e_left \
+  collision_safety:=true \
+  safe_target_timeout:=5.0
+```
+
+```bash
+ros2 launch launch/factr_teleop_ur7e.py \
+  config_file:=ur7e_leader_right.yaml \
+  node_name:=factr_teleop_ur7e_right \
+  collision_safety:=true \
+  safe_target_timeout:=5.0
+```
+
 ## Return Right UR To Initial Match Pose
 
 ```bash
