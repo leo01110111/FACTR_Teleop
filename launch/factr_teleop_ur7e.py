@@ -42,6 +42,16 @@ def generate_launch_description():
         default_value="false",
         description="Only print leader start-match errors and exit after matching.",
     )
+    collision_safety_arg = DeclareLaunchArgument(
+        "collision_safety",
+        default_value="false",
+        description="Use /factr_teleop/{left,right}/safe_ur_pos from the openpi-yam QP safety node.",
+    )
+    safe_target_timeout_arg = DeclareLaunchArgument(
+        "safe_target_timeout",
+        default_value="0.25",
+        description="Hold current UR pose if safe_ur_pos is older than this many seconds.",
+    )
 
     factr_teleop_ur7e = Node(
         package="factr_teleop",
@@ -57,6 +67,18 @@ def generate_launch_description():
                     value_type=bool,
                 )
             },
+            {
+                "collision_safety": ParameterValue(
+                    LaunchConfiguration("collision_safety"),
+                    value_type=bool,
+                )
+            },
+            {
+                "safe_target_timeout": ParameterValue(
+                    LaunchConfiguration("safe_target_timeout"),
+                    value_type=float,
+                )
+            },
         ],
     )
 
@@ -64,5 +86,7 @@ def generate_launch_description():
         config_file_arg,
         node_name_arg,
         leader_match_only_arg,
+        collision_safety_arg,
+        safe_target_timeout_arg,
         factr_teleop_ur7e,
     ])

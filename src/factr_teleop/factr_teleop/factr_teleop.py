@@ -17,6 +17,7 @@
 # ---------------------------------------------------------------------------
 
 import os
+import sys
 import time
 import yaml
 import subprocess
@@ -274,6 +275,7 @@ class FACTRTeleop(Node, ABC):
         """
         curr_pos, _, curr_gripper_pos, _ = self.get_leader_joint_states()
         printed_match_status = False
+        printed_match_lines = 0
         while True:
             joint_pos_error = curr_pos - self.initial_match_joint_pos[0:self.num_arm_joints]
             current_joint_error = np.linalg.norm(joint_pos_error)
@@ -283,26 +285,31 @@ class FACTRTeleop(Node, ABC):
             per_joint_err = np.abs(joint_pos_error)
             match_str = np.array2string(
                 self.initial_match_joint_pos[0:self.num_arm_joints],
-                precision=2, floatmode="fixed", separator=", ",
+                precision=2, floatmode="fixed", separator=", ", max_line_width=1000,
             )
             curr_str = np.array2string(
-                curr_pos, precision=2, floatmode="fixed", separator=", ",
+                curr_pos, precision=2, floatmode="fixed", separator=", ", max_line_width=1000,
             )
             err_str = np.array2string(
-                per_joint_err, precision=2, floatmode="fixed", separator=", ",
+                per_joint_err, precision=2, floatmode="fixed", separator=", ", max_line_width=1000,
             )
             status_lines = [
-                f"Per-joint error: {err_str}",
-                f"Initial match joint position: {match_str}",
-                f"Current joint position: {curr_str}",
-                f"Gripper joint position (post-calibration): {curr_gripper_pos:.2f}",
-                f"Current error: {current_joint_error:.2f}",
+                f"Match error: {current_joint_error:.2f}",
+                f"Per-joint:   {err_str}",
+                f"Target q:    {match_str}",
+                f"Current q:   {curr_str}",
+                f"Gripper q:   {curr_gripper_pos:.2f}",
             ]
             if printed_match_status:
-                print(f"\x1b[{len(status_lines)}A", end="")
+                sys.stdout.write(f"\x1b[{printed_match_lines}F")
+                for _ in range(printed_match_lines):
+                    sys.stdout.write("\x1b[2K\n")
+                sys.stdout.write(f"\x1b[{printed_match_lines}F")
             for line in status_lines:
-                print(f"\r\x1b[2K{line}")
+                sys.stdout.write(f"\x1b[2K{line}\n")
+            sys.stdout.flush()
             printed_match_status = True
+            printed_match_lines = len(status_lines)
             curr_pos, _, curr_gripper_pos, _ = self.get_leader_joint_states()
             time.sleep(0.5)
         if printed_match_status:

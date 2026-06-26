@@ -1,0 +1,10 @@
+{
+    "end_effector_frame_name": "tool0",
+    "maximum_substep_size": 0.00334,
+    "ignore_robot_state_updates": false,
+    "relative_asset_paths": {
+        "robot_description_path": "maxlab_ur7e_right_robot_description.yaml",
+        "urdf_path": "../maxlab_ur7e_right.urdf",
+        "rmpflow_config_path": "maxlab_ur7e_right_rmpflow_config.yaml"
+    }
+}

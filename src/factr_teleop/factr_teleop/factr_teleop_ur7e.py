@@ -106,6 +106,19 @@ class FACTRTeleopUR7e(FACTRTeleop):
         # Timestamp of the previous servoJ call, used to measure the real control
         # period for servoJ's `time` argument (see update_communication).
         self._last_servo_t = None
+        self._ensure_collision_safety_state()
+
+    def _ensure_collision_safety_state(self):
+        if hasattr(self, "enable_collision_safety"):
+            return
+        self.enable_collision_safety = self.declare_parameter(
+            "collision_safety", False
+        ).get_parameter_value().bool_value
+        self.safe_target_timeout = self.declare_parameter(
+            "safe_target_timeout", 0.25
+        ).get_parameter_value().double_value
+        self._latest_safe_ur_pos = None
+        self._latest_safe_ur_pos_t = 0.0
 
     # ------------------------------------------------------------------ setup
     def set_up_communication(self):
@@ -116,6 +129,7 @@ class FACTRTeleopUR7e(FACTRTeleop):
         Starts the ROS nodes
         Starts the gripper io loop
         """
+        self._ensure_collision_safety_state()
         if self.name == "left":
             addr = ur_left_real_addresses
         elif self.name == "right":
@@ -200,6 +214,7 @@ class FACTRTeleopUR7e(FACTRTeleop):
 
         # ROS publishers for logging / behavior-cloning data collection.
         self.obs_ur_state_pub = self.create_publisher(JointState, f'/ur/{self.name}/obs_ur_state', 10)
+        self.desired_ur_pos_pub = self.create_publisher(JointState, f'/factr_teleop/{self.name}/desired_ur_pos', 10)
         self.cmd_ur_pos_pub = self.create_publisher(JointState, f'/factr_teleop/{self.name}/cmd_ur_pos', 10)
         self.cmd_gripper_pos_pub = self.create_publisher(JointState, f'/factr_teleop/{self.name}/cmd_gripper_pos', 10)
         # Raw TCP wrench is logged unconditionally as an observation (cheap
@@ -209,6 +224,16 @@ class FACTRTeleopUR7e(FACTRTeleop):
         # Follower gripper state ([position, current] in raw Robotiq 0..255 units,
         # matching the command logging) -- always-on observation for training.
         self.obs_gripper_pub = self.create_publisher(JointState, f'/ur/{self.name}/obs_gripper', 10)
+        if self.enable_collision_safety:
+            self.create_subscription(
+                JointState,
+                f"/factr_teleop/{self.name}/safe_ur_pos",
+                self._safe_ur_pos_cb,
+                10,
+            )
+            self.get_logger().info(
+                f"FACTR UR7e {self.name}: using openpi-yam QP safety target topic."
+            )
 
         # ---- Robotiq 2F-85 gripper (optional, runs in its own slow thread) ----
         gripper_cfg = self.config["gripper_teleop"]
@@ -263,6 +288,18 @@ class FACTRTeleopUR7e(FACTRTeleop):
             except Exception:
                 pass
             time.sleep(period)
+
+    def _safe_ur_pos_cb(self, msg):
+        if len(msg.position) < self.num_arm_joints:
+            self.get_logger().warn(
+                f"Ignoring safe target with {len(msg.position)} positions; "
+                f"expected {self.num_arm_joints}."
+            )
+            return
+        self._latest_safe_ur_pos = np.asarray(
+            msg.position[:self.num_arm_joints], dtype=np.float64
+        )
+        self._latest_safe_ur_pos_t = time.monotonic()
 
     # ----------------------------------------------------------- force feedback
     def get_leader_arm_external_joint_torque(self):
@@ -347,8 +384,19 @@ class FACTRTeleopUR7e(FACTRTeleop):
         self._last_servo_t = now
         servo_dt = float(np.clip(servo_dt, 0.002, 0.05))
         # v and a are ignored by servoJ; time/lookahead/gain shape the tracking.
+        current_q = np.array(self.rtde_r.getActualQ())[:self.num_arm_joints]
+        desired_q = np.array(leader_arm_pos, dtype=np.float64)
+        self.desired_ur_pos_pub.publish(create_array_msg(desired_q))
+        target_q = desired_q
+        if self.enable_collision_safety:
+            safe_fresh = (
+                self._latest_safe_ur_pos is not None
+                and time.monotonic() - self._latest_safe_ur_pos_t <= self.safe_target_timeout
+            )
+            target_q = self._latest_safe_ur_pos.copy() if safe_fresh else current_q
+
         self.rtde_c.servoJ(
-            list(map(float, leader_arm_pos)),
+            list(map(float, target_q)),
             0.0, 0.0, servo_dt, self.servo_lookahead_time, self.servo_gain,
         )
 
@@ -364,7 +412,7 @@ class FACTRTeleopUR7e(FACTRTeleop):
         # ROS logging for data collection. The gripper action is logged in
         # follower (Robotiq, 0..255) units -- the space the policy commands at
         # deployment -- not the leader's trigger angle.
-        self.cmd_ur_pos_pub.publish(create_array_msg(leader_arm_pos))
+        self.cmd_ur_pos_pub.publish(create_array_msg(target_q))
         self.cmd_gripper_pos_pub.publish(create_array_msg([gripper_cmd_255]))
         self.obs_ur_state_pub.publish(create_array_msg(self.rtde_r.getActualQ()))
         # TCP wrench (base frame [Fx,Fy,Fz,Tx,Ty,Tz]) as an always-on force

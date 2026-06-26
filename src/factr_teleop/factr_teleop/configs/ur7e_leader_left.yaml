@@ -50,7 +50,7 @@ controller:
     damping: 0.0
     motor_scalar: 94.5652173913
   gravity_comp:
-    enable: True
+    enable: False
     # Per-joint gains: [base, shoulder, elbow, wrist1, wrist2, wrist3].
     gain: [4.0, 4.0, -4.0, 3.0, 0.85, 0.85]
   null_space_regulation:

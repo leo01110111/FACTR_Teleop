@@ -1,0 +1,49 @@
+# Metadata for the MaxLab right UR7e RMPFlow scaffold.
+#
+# This file records project-specific placement and joint convention notes that
+# are outside the stock Lula config schema. It is a starting scaffold, not a
+# verified runtime contract.
+
+status: scaffold_unverified
+
+sources:
+  isaac_ur5e_example: /home/srianumakonda/anaconda3/envs/env_isaaclab/lib/python3.11/site-packages/isaacsim/exts/isaacsim.robot_motion.motion_generation/motion_policy_configs/universal_robots/ur5e
+  maxlab_builder: /home/srianumakonda/maxlab/sim/build_urtable.py
+  maxlab_source_arm_mjcf: /home/srianumakonda/maxlab/sim/universal_robots_ur5e/ur5e.xml
+  scene_metadata: ../maxlab_ur7e_scene.yaml
+
+arm:
+  name: maxlab_ur7e_right
+  side: right
+  source_path_note: The MaxLab arm MJCF path keeps the legacy ur5e name, but project comments say to treat it as UR7e.
+
+base_in_world:
+  pos: [0.7425, -0.005, 0.766]
+  yaw_rad: -1.57079632679
+  quat_wxyz: [0.70710678, 0.0, 0.0, -0.70710678]
+
+joint_order:
+  - shoulder_pan_joint
+  - shoulder_lift_joint
+  - elbow_joint
+  - wrist_1_joint
+  - wrist_2_joint
+  - wrist_3_joint
+
+real_to_sim_joint_offsets:
+  wrist_3_joint: 3.14159265359
+
+factr_initial_match_joint_pos_real:
+  right: [-1.5700, -1.5700, -1.5700, -1.5700, 1.5700, 0.0000]
+
+factr_initial_match_joint_pos_sim_with_known_offsets:
+  right: [-1.5700, -1.5700, -1.5700, -1.5700, 1.5700, 3.14159265359]
+
+sim_home_position_from_maxlab_scene:
+  right: [1.57, -1.134, 1.134, -1.5708, -1.5708, 3.1416]
+
+verification_needed:
+  - Replace or regenerate the URDF from the MaxLab UR7e MJCF/USD source.
+  - Confirm all joint axes, limits, signs, and real-to-sim offsets in Isaac.
+  - Regenerate collision spheres for the actual UR7e plus right tool/gripper.
+  - Tune RMPFlow gains and collision parameters in simulation before robot use.
