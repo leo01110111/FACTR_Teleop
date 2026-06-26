@@ -12,7 +12,7 @@ Run Isaac RMPFlow and FACTR ROS as two separate Python processes:
 ```text
 factr_conda_env process                     env_isaaclab process
 ----------------------                     ---------------------
-ROS bridge node             ZMQ REQ/REP     Isaac RMPFlow server
+ROS bridge node             ZMQ stream      Isaac RMPFlow server
 - rclpy, ROS 2 topics  ----------------->  - Isaac Lab / Isaac Sim
 - FACTR topic contract   joint requests     - Lula / RMPFlow world
 - freshness watchdogs    <----------------  - collision scene
@@ -24,7 +24,16 @@ startup safety checks, leader matching, and the final `servoJ` command path. The
 Isaac process owns Isaac Lab, USD/articulation setup, RMPFlow, and collision
 world state. ZMQ is only the boundary between those two environments.
 
-## Process 1: ROS Bridge Node
+Run only one active safe-target producer at a time. The old OpenPI-YAM
+collision monitor and the Isaac/Lula stream bridge publish the same
+`/factr_teleop/<side>/safe_ur_pos` topic, so do not run both while teleop is
+using `collision_safety:=true`.
+
+## Request/Response Debug Path
+
+The request/response bridge is useful for transport/debug bring-up because one
+request maps to one response. It is not the FACTR-style high-rate control path.
+Run it in `pass_through` and shadow mode first.
 
 Run this from the FACTR ROS environment:
 
@@ -41,7 +50,7 @@ ros2 launch launch/isaac_rmpflow_zmq_bridge.py \
   state_timeout_s:=0.10 \
   desired_timeout_s:=0.10 \
   isaac_response_timeout_s:=0.05 \
-  publish_safe_targets:=true
+  publish_safe_targets:=false
 ```
 
 The bridge should subscribe to the existing FACTR streams:
@@ -61,8 +70,6 @@ The bridge should keep ROS topic data in real UR joint coordinates. Any Isaac
 joint-order, wrist-offset, frame, or base-pose conversion belongs inside the
 bridge/server boundary, not in the teleop loop.
 
-## Process 2: Isaac RMPFlow Server
-
 Run this from the Isaac Lab environment:
 
 ```bash
@@ -70,7 +77,7 @@ cd /home/srianumakonda/FACTR_Teleop
 
 ISAAC_CONDA_ENV=env_isaaclab \
   bash scripts/isaac_rmpflow/run_lula_zmq_server.sh \
-  --mode rmp \
+  --mode pass_through \
   --endpoint tcp://127.0.0.1:5557 \
   --config-dir /home/srianumakonda/FACTR_Teleop/configs/isaac_rmpflow/maxlab_ur7e_right
 ```
@@ -84,6 +91,136 @@ The current RMPFlow runtime is Isaac/Lula only. The previous experimental
 non-Isaac RMP mode was removed from `ur7e_collision_monitor.py`; that node now
 keeps only the older position/QP-style safety path with `velocity` and
 `posture` modes.
+
+## High-Rate Streaming Variant
+
+The request/response bridge above is useful for bring-up, but it is not the
+closest match to the original FACTR controller architecture. The closer path is:
+
+```text
+FACTR ROS topics        latest input stream        Isaac/Lula process
+obs_q, desired_q  ----------------------------->  fixed-rate RMPFlow loop
+safe_q topic      <-----------------------------  latest safe target stream
+UR servoJ tracks safe_q
+```
+
+Run the streaming server from `env_isaaclab`:
+
+```bash
+cd /home/srianumakonda/FACTR_Teleop
+
+bash scripts/isaac_rmpflow/run_lula_stream_server.sh \
+  --mode rmp \
+  --input-endpoint tcp://127.0.0.1:5558 \
+  --output-endpoint tcp://127.0.0.1:5559 \
+  --loop-hz 500.0 \
+  --policy-sides right \
+  --dynamic-other-arm-obstacles \
+  --require-other-arm-state
+```
+
+Run the ROS streaming bridge from `factr_teleop`:
+
+```bash
+cd /home/srianumakonda/FACTR_Teleop
+source ./factr_conda_env
+source install/setup.bash
+
+ros2 launch launch/isaac_rmpflow_stream_bridge.py \
+  active_sides:=right \
+  input_endpoint:=tcp://127.0.0.1:5558 \
+  output_endpoint:=tcp://127.0.0.1:5559 \
+  publish_hz:=500.0 \
+  max_joint_step_rad:=0.05 \
+  max_safe_target_distance_rad:=0.05 \
+  publish_safe_targets:=false
+```
+
+The streaming server publishes status once per second. A healthy 500 Hz loop
+should report roughly `published: 500` per second and `last_ok: true` while
+fresh ROS inputs are arriving. If inputs stop, it switches to `ok: false` with
+an input-age reason, and the ROS bridge should publish no new safe target.
+
+For shadow validation, keep `publish_safe_targets:=false` and inspect:
+
+```bash
+ros2 topic echo /factr_teleop/isaac_rmpflow_stream/status
+ros2 topic echo /factr_teleop/isaac_rmpflow_stream/reason
+ros2 topic echo /factr_teleop/right/isaac_stream_safe_error
+```
+
+Or collect a 30 second shadow-health summary:
+
+```bash
+cd /home/srianumakonda/FACTR_Teleop
+source ./factr_conda_env
+source install/setup.bash
+
+python scripts/isaac_rmpflow/collect_stream_shadow_diagnostics.py \
+  --active-sides right \
+  --duration-s 30 \
+  --output-json /tmp/isaac_rmpflow_shadow_right.json
+```
+
+Go only when the JSON summary has `shadow_healthy: true`, zero
+`safe_ur_pos_counts` for every active side, fresh observed/desired topics, a
+fresh other-arm observed topic when using dynamic other-arm obstacles,
+`controller_hz` present and near the expected loop rate, low `input_age_ms`, and
+empty `missing_required_topics` and `stale_required_topics`.
+
+`publish_safe_targets:=false` is shadow only: it must not publish
+`/factr_teleop/<side>/safe_ur_pos`. During shadow mode, run FACTR teleop without
+`collision_safety:=true` so normal FACTR motion continues while the RMPFlow
+stream is observed. The first active command path is relaunching the bridge with
+`publish_safe_targets:=true` and the same conservative hardware bring-up
+limits:
+
+```bash
+ros2 launch launch/isaac_rmpflow_stream_bridge.py \
+  active_sides:=right \
+  input_endpoint:=tcp://127.0.0.1:5558 \
+  output_endpoint:=tcp://127.0.0.1:5559 \
+  publish_hz:=500.0 \
+  max_joint_step_rad:=0.05 \
+  max_safe_target_distance_rad:=0.05 \
+  publish_safe_targets:=true
+```
+
+Use `collision_safety:=true` only after relaunching the bridge with
+`publish_safe_targets:=true`. For first hardware bring-up, also pass
+`safe_target_timeout:=0.10` to the UR7e teleop launch so stale safe targets are
+dropped quickly.
+
+`--dynamic-other-arm-obstacles` initializes the left arm as Lula sphere
+obstacles at the configured left initial pose and updates those obstacles when
+fresh `/ur/left/obs_ur_state` messages arrive. For real moving bimanual
+validation, run a left-state publisher and keep `--require-other-arm-state` in
+the stream-server command so missing left observations fail closed. Omitting
+`--require-other-arm-state` is only for static-left/static-other-arm tests.
+
+Offline Lula obstacle sanity check:
+
+```bash
+cd /home/srianumakonda/FACTR_Teleop
+source /home/srianumakonda/anaconda3/etc/profile.d/conda.sh
+conda activate env_isaaclab
+export PYTHONPATH=/home/srianumakonda/FACTR_Teleop/scripts/isaac_rmpflow:/home/srianumakonda/anaconda3/envs/env_isaaclab/lib/python3.11/site-packages/isaacsim/exts/isaacsim.robot_motion.lula/pip_prebundle:${PYTHONPATH:-}
+export LD_LIBRARY_PATH=/home/srianumakonda/anaconda3/envs/env_isaaclab/lib/python3.11/site-packages/isaacsim/exts/isaacsim.robot_motion.lula/pip_prebundle/_lula_libs:${LD_LIBRARY_PATH:-}
+
+python scripts/isaac_rmpflow/probe_lula_obstacle_response.py --fail-if-no-effect
+```
+
+Local fake-ROS streaming smoke test:
+
+```bash
+cd /home/srianumakonda/FACTR_Teleop
+source ./factr_conda_env
+source install/setup.bash
+
+python scripts/isaac_rmpflow/run_stream_bridge_smoke_test.py \
+  --duration-s 2.0 \
+  --min-safe-count 20
+```
 
 ## ZMQ Pattern
 
@@ -194,19 +331,22 @@ than FACTR's safe-target timeout so the robot never chases old Isaac output.
 Recommended diagnostics:
 
 ```text
-/factr_teleop/isaac_rmpflow/status
-/factr_teleop/isaac_rmpflow/reason
-/factr_teleop/isaac_rmpflow/roundtrip_ms
-/factr_teleop/isaac_rmpflow/min_distance
-/factr_teleop/<side>/isaac_safe_error
+/factr_teleop/isaac_rmpflow_stream/status
+/factr_teleop/isaac_rmpflow_stream/reason
+/factr_teleop/isaac_rmpflow_stream/controller_hz
+/factr_teleop/isaac_rmpflow_stream/input_age_ms
+/factr_teleop/<side>/isaac_stream_safe_error
 ```
 
 Bring-up order:
 
-1. Run the Isaac server headless and answer synthetic requests.
-2. Run the ROS bridge against recorded or hand-published joint states.
-3. Run shadow mode on hardware without publishing `safe_ur_pos`.
-4. Publish `safe_ur_pos` while FACTR collision-safety consumption is disabled.
+1. Run the offline Lula obstacle-response probe.
+2. Run the Isaac stream server and ROS stream bridge against fake/hand-published
+   joint states.
+3. Run shadow mode on hardware with `publish_safe_targets:=false` and pass
+   `collect_stream_shadow_diagnostics.py`.
+4. Relaunch the bridge with `publish_safe_targets:=true` and the 0.05 rad
+   bring-up limits.
 5. Enable FACTR collision-safety consumption at the matched start pose and low
    operator speed.
 

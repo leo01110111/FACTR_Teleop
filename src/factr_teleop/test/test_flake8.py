@@ -12,8 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ament_flake8.main import main_with_errors
+import unittest
+
 import pytest
+
+try:
+    from ament_flake8.main import main_with_errors
+except ImportError as exc:
+    raise unittest.SkipTest(f"ament_flake8 dependencies unavailable: {exc}")
 
 
 @pytest.mark.flake8

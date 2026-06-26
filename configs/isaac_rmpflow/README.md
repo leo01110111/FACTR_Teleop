@@ -50,15 +50,69 @@ joint vectors as `factr:initial_q_real` and `factr:initial_q_sim` attributes on
 
 ## Isaac/Lula RMPFlow ZMQ Server
 
-The RMPFlow server uses bundled Lula directly and communicates with FACTR ROS
-through ZMQ. Use `pass_through` mode first to test transport, then `rmp` mode to
-exercise Lula/RMPFlow.
+The request/response RMPFlow server uses bundled Lula directly and communicates
+with FACTR ROS through ZMQ. Use this path for transport/debug bring-up in
+`pass_through` mode before any active robot command path.
 
 ```bash
 cd /home/srianumakonda/FACTR_Teleop
 bash scripts/isaac_rmpflow/run_lula_zmq_server.sh \
-  --mode rmp \
+  --mode pass_through \
   --endpoint tcp://127.0.0.1:5557
+```
+
+For the higher-rate FACTR-style controller loop, use the streaming server
+instead. It consumes the latest observed/desired joint state stream and runs
+RMPFlow on its own fixed loop:
+
+```bash
+cd /home/srianumakonda/FACTR_Teleop
+bash scripts/isaac_rmpflow/run_lula_stream_server.sh \
+  --mode rmp \
+  --input-endpoint tcp://127.0.0.1:5558 \
+  --output-endpoint tcp://127.0.0.1:5559 \
+  --loop-hz 500.0 \
+  --policy-sides right \
+  --dynamic-other-arm-obstacles \
+  --require-other-arm-state
+```
+
+For real moving right-arm/left-arm validation, run a left-state publisher and
+keep `--require-other-arm-state` in the stream-server command. Omitting
+`--require-other-arm-state` is only for static-left/static-other-arm tests: the
+server starts with the configured left initial pose as static obstacles and only
+updates them when fresh left observed joint state arrives. For both arms, use
+`--policy-sides left,right` and run the ROS bridge with
+`active_sides:=left,right` only after both side models are visually checked.
+
+Before enabling active safe-target publication, run the stream bridge in shadow
+mode with `publish_safe_targets:=false` and collect:
+
+```bash
+python scripts/isaac_rmpflow/collect_stream_shadow_diagnostics.py \
+  --active-sides right \
+  --duration-s 30 \
+  --output-json /tmp/isaac_rmpflow_shadow_right.json
+```
+
+Go only when `shadow_healthy` is true, `safe_ur_pos_counts` is zero for every
+active side, observed/desired and other-arm observed topics are fresh,
+`controller_hz` is present and near the expected loop rate, `input_age_ms` is
+low, and `missing_required_topics` and `stale_required_topics` are empty. Then
+use `publish_safe_targets:=true` as the first active bridge command path, with
+`max_joint_step_rad:=0.05` and `max_safe_target_distance_rad:=0.05` for initial
+hardware bring-up.
+
+Offline collision-RMP sanity check:
+
+```bash
+cd /home/srianumakonda/FACTR_Teleop
+source /home/srianumakonda/anaconda3/etc/profile.d/conda.sh
+conda activate env_isaaclab
+export PYTHONPATH=/home/srianumakonda/FACTR_Teleop/scripts/isaac_rmpflow:/home/srianumakonda/anaconda3/envs/env_isaaclab/lib/python3.11/site-packages/isaacsim/exts/isaacsim.robot_motion.lula/pip_prebundle:${PYTHONPATH:-}
+export LD_LIBRARY_PATH=/home/srianumakonda/anaconda3/envs/env_isaaclab/lib/python3.11/site-packages/isaacsim/exts/isaacsim.robot_motion.lula/pip_prebundle/_lula_libs:${LD_LIBRARY_PATH:-}
+
+python scripts/isaac_rmpflow/probe_lula_obstacle_response.py --fail-if-no-effect
 ```
 
 ## MJCF Importer Debug Path
@@ -85,6 +139,12 @@ Lula RMPFlow does not use USD alone. It expects:
 The generated primitive URDF is the current kinematic input for Lula. The
 remaining work is validation: confirm axes, limits, wrist offsets, collision
 spheres, base poses, and RMPFlow gains before using RMPFlow on hardware.
+
+The scene metadata stores both the MaxLab mount pose and `world_from_lula_base`.
+Use `world_from_lula_base` for RMPFlow/dynamic-obstacle transforms: it composes
+the mount rotation with the source MJCF UR base body rotation
+`mjcf_base_quat_wxyz: [0, 0, 0, -1]`. Using only the mount yaw places other-arm
+obstacle spheres in the wrong policy frame.
 
 ## Right UR7e Scaffold
 

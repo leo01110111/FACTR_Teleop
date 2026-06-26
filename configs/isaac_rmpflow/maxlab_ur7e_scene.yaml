@@ -19,10 +19,20 @@ bases:
     pos: [-0.7425, -0.005, 0.766]
     yaw_rad: 1.57079632679
     quat_wxyz: [0.70710678, 0.0, 0.0, 0.70710678]
+    mjcf_base_quat_wxyz: [0.0, 0.0, 0.0, -1.0]
+    world_from_lula_base:
+      pos: [-0.7425, -0.005, 0.766]
+      yaw_rad: -1.57079632679
+      quat_wxyz: [0.70710678, 0.0, 0.0, -0.70710678]
   right:
     pos: [0.7425, -0.005, 0.766]
     yaw_rad: -1.57079632679
     quat_wxyz: [0.70710678, 0.0, 0.0, -0.70710678]
+    mjcf_base_quat_wxyz: [0.0, 0.0, 0.0, -1.0]
+    world_from_lula_base:
+      pos: [0.7425, -0.005, 0.766]
+      yaw_rad: 1.57079632679
+      quat_wxyz: [0.70710678, 0.0, 0.0, 0.70710678]
 
 factr_real_to_sim_offsets:
   left_wrist_3: 1.57079632679

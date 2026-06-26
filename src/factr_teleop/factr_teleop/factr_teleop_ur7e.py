@@ -232,7 +232,7 @@ class FACTRTeleopUR7e(FACTRTeleop):
                 10,
             )
             self.get_logger().info(
-                f"FACTR UR7e {self.name}: using openpi-yam QP safety target topic."
+                f"FACTR UR7e {self.name}: using safe_ur_pos safety filter topic."
             )
 
         # ---- Robotiq 2F-85 gripper (optional, runs in its own slow thread) ----

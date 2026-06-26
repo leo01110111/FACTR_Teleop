@@ -45,7 +45,7 @@ def generate_launch_description():
     collision_safety_arg = DeclareLaunchArgument(
         "collision_safety",
         default_value="false",
-        description="Use /factr_teleop/{left,right}/safe_ur_pos from the openpi-yam QP safety node.",
+        description="Use /factr_teleop/{left,right}/safe_ur_pos from an external safe-target safety source.",
     )
     safe_target_timeout_arg = DeclareLaunchArgument(
         "safe_target_timeout",
