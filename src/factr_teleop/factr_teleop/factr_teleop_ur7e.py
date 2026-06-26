@@ -384,16 +384,17 @@ class FACTRTeleopUR7e(FACTRTeleop):
         self._last_servo_t = now
         servo_dt = float(np.clip(servo_dt, 0.002, 0.05))
         # v and a are ignored by servoJ; time/lookahead/gain shape the tracking.
-        current_q = np.array(self.rtde_r.getActualQ())[:self.num_arm_joints]
-        desired_q = np.array(leader_arm_pos, dtype=np.float64)
-        self.desired_ur_pos_pub.publish(create_array_msg(desired_q))
-        target_q = desired_q
         if self.enable_collision_safety:
+            desired_q = np.array(leader_arm_pos, dtype=np.float64)
+            self.desired_ur_pos_pub.publish(create_array_msg(desired_q))
+            current_q = np.array(self.rtde_r.getActualQ())[:self.num_arm_joints]
             safe_fresh = (
                 self._latest_safe_ur_pos is not None
                 and time.monotonic() - self._latest_safe_ur_pos_t <= self.safe_target_timeout
             )
             target_q = self._latest_safe_ur_pos.copy() if safe_fresh else current_q
+        else:
+            target_q = leader_arm_pos
 
         self.rtde_c.servoJ(
             list(map(float, target_q)),
