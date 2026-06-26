@@ -262,7 +262,7 @@
   <joint name="wrist_3_to_tool0" type="fixed">
     <parent link="wrist_3_link" />
     <child link="tool0" />
-    <origin xyz="0 0.1 0" rpy="3.141592654 0 -1.570796327" />
+    <origin xyz="0 0.107 0" rpy="-1.570796327 0 0" />
   </joint>
   <link name="pinch_center">
     <inertial>
@@ -306,7 +306,7 @@
   <joint name="tool0_to_robotiq_base" type="fixed">
     <parent link="tool0" />
     <child link="robotiq_base" />
-    <origin xyz="0 0 0.035" rpy="0 0 0" />
+    <origin xyz="0 0 0" rpy="0 0 1.570796327" />
   </joint>
   <link name="robotiq_right_finger">
     <inertial>

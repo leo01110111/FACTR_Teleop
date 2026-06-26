@@ -38,101 +38,134 @@ cspace:
 tool_frames: ["tool0"]
 
 world_collision:
-  geometry: "ur10_collision_spheres"
+  geometry: "ur7e_collision_spheres"
 
 self_collision:
-  geometry: "ur10_self_collision_spheres"
+  geometry: "ur7e_self_collision_spheres"
   ignore:
     shoulder_link: [ "upper_arm_link" ]
     upper_arm_link: [ "forearm_link" ]
     forearm_link: [ "wrist_1_link" ]
     wrist_1_link: [ "wrist_2_link" ]
+    wrist_2_link: [ "wrist_3_link" ]
+    wrist_3_link: [ "tool0", "robotiq_base" ]
+    tool0: [ "wrist_3_link", "pinch_center", "robotiq_base" ]
+    robotiq_base: [ "tool0", "robotiq_right_finger", "robotiq_left_finger" ]
+    robotiq_right_finger: [ "robotiq_base", "robotiq_right_pad" ]
+    robotiq_left_finger: [ "robotiq_base", "robotiq_left_pad" ]
 
 geometry:
-  ur10_collision_spheres:
+  ur7e_collision_spheres:
     spheres:
-      upper_arm_link:
-        - center: [ 0.0, -0.01, 0.0 ]
-          radius: 0.085
-        - center: [ 0.0, -0.09, 0.0 ]
-          radius: 0.085
-        - center: [ 0.0, -0.042, 0.06 ]
-          radius: 0.085
-        - center: [ 0.0, -0.042, 0.15 ]
-          radius: 0.067
-        - center: [ 0.0, -0.042, 0.21 ]
-          radius: 0.067
-        - center: [ 0.0, -0.042, 0.28 ]
-          radius: 0.067
-        - center: [ 0.0, -0.042, 0.35 ]
-          radius: 0.067
-        - center: [ 0.0, -0.042, 0.42 ]
-          radius: 0.067
-        - center: [ 0.0, -0.042, 0.49 ]
-          radius: 0.067
-        - center: [ 0.0, -0.042, 0.57 ]
-          radius: 0.075
-        - center: [ 0.0, -0.01, 0.62 ]
-          radius: 0.065
-        - center: [ 0.0, -0.09, 0.62 ]
-          radius: 0.065
-      forearm_link:
-        - center: [ 0.0, 0.04, 0.005 ]
-          radius: 0.065
-        - center: [ 0.0, -0.01, 0.015 ]
-          radius: 0.077
-        - center: [ 0.0, 0.0, 0.085 ]
-          radius: 0.0625
-        - center: [ 0.0, 0.0, 0.15 ]
-          radius: 0.048
-        - center: [ 0.0, 0.0, 0.18 ]
-          radius: 0.048
-        - center: [ 0.0, 0.0, 0.21 ]
-          radius: 0.048
-        - center: [ 0.0, 0.0, 0.24 ]
-          radius: 0.048
-        - center: [ 0.0, 0.0, 0.28 ]
-          radius: 0.048
-        - center: [ 0.0, 0.0, 0.31 ]
-          radius: 0.048
-        - center: [ 0.0, 0.0, 0.35 ]
-          radius: 0.048
-        - center: [ 0.0, 0.0, 0.38 ]
-          radius: 0.048
-        - center: [ 0.0, 0.0, 0.42 ]
-          radius: 0.048
-        - center: [ 0.0, 0.0, 0.45 ]
-          radius: 0.048
-        - center: [ 0.0, 0.0, 0.49 ]
-          radius: 0.048
-        - center: [ 0.0, 0.0, 0.565 ]
-          radius: 0.068
-      wrist_1_link:
-        - center: [ 0.0, 0.11, 0.05 ]
-          radius: 0.055
-        - center: [ 0.0, 0.105, -0.008 ]
+      shoulder_link:
+        - center: [ 0.0, 0.0, -0.09 ]
           radius: 0.062
+        - center: [ 0.0, 0.0, -0.03 ]
+          radius: 0.062
+        - center: [ 0.0, 0.0, 0.02 ]
+          radius: 0.060
+      upper_arm_link:
+        - center: [ 0.0, -0.08, 0.0 ]
+          radius: 0.063
+        - center: [ 0.0, -0.02, 0.0 ]
+          radius: 0.063
+        - center: [ 0.0, 0.0, 0.045 ]
+          radius: 0.055
+        - center: [ 0.0, 0.0, 0.125 ]
+          radius: 0.055
+        - center: [ 0.0, 0.0, 0.205 ]
+          radius: 0.055
+        - center: [ 0.0, 0.0, 0.285 ]
+          radius: 0.055
+        - center: [ 0.0, 0.0, 0.365 ]
+          radius: 0.055
+      forearm_link:
+        - center: [ 0.0, 0.04, 0.0 ]
+          radius: 0.058
+        - center: [ 0.0, 0.12, 0.0 ]
+          radius: 0.058
+        - center: [ 0.0, 0.0, 0.055 ]
+          radius: 0.042
+        - center: [ 0.0, 0.0, 0.130 ]
+          radius: 0.042
+        - center: [ 0.0, 0.0, 0.205 ]
+          radius: 0.042
+        - center: [ 0.0, 0.0, 0.280 ]
+          radius: 0.042
+        - center: [ 0.0, 0.0, 0.355 ]
+          radius: 0.042
+      wrist_1_link:
+        - center: [ 0.0, -0.005, 0.0 ]
+          radius: 0.042
+        - center: [ 0.0, 0.055, 0.0 ]
+          radius: 0.042
+        - center: [ 0.0, 0.115, 0.0 ]
+          radius: 0.042
       wrist_2_link:
-        - center: [ 0.0, 0.05, 0.115 ]
-          radius: 0.055
-        - center: [ 0.0, -0.008, 0.11 ]
-          radius: 0.055
-        - center: [ 0.027, -0.028, 0.1 ]
+        - center: [ 0.0, 0.0, 0.0 ]
+          radius: 0.042
+        - center: [ 0.0, 0.0, 0.055 ]
+          radius: 0.042
+        - center: [ 0.0, 0.0, 0.100 ]
+          radius: 0.042
+        - center: [ 0.0, -0.015, 0.100 ]
+          radius: 0.042
+        - center: [ 0.0, 0.045, 0.100 ]
+          radius: 0.042
+      wrist_3_link:
+        - center: [ 0.0, 0.06, 0.0 ]
+          radius: 0.045
+        - center: [ 0.0, 0.10, 0.0 ]
+          radius: 0.045
+      tool0:
+        - center: [ 0.0, 0.0, 0.0 ]
           radius: 0.03
-        - center: [ -0.027, -0.028, 0.1 ]
-          radius: 0.03
-        - center: [ -0.015, -0.028, 0.135 ]
-          radius: 0.03
-        - center: [ 0.02, -0.028, 0.135 ]
-          radius: 0.03
-        - center: [ 0.0, -0.028, 0.08 ]
-          radius: 0.03
-  ur10_self_only_collision_spheres:
+        - center: [ 0.0, 0.0, 0.035 ]
+          radius: 0.040
+        - center: [ 0.0, 0.0, 0.095 ]
+          radius: 0.035
+      pinch_center:
+        - center: [ 0.0, 0.0, 0.0 ]
+          radius: 0.020
+      robotiq_base:
+        - center: [ -0.025, 0.0, -0.018 ]
+          radius: 0.045
+        - center: [ 0.025, 0.0, -0.018 ]
+          radius: 0.045
+        - center: [ -0.025, 0.0, 0.018 ]
+          radius: 0.045
+        - center: [ 0.025, 0.0, 0.018 ]
+          radius: 0.045
+      robotiq_right_finger:
+        - center: [ 0.0, 0.0, -0.025 ]
+          radius: 0.021
+        - center: [ 0.0, 0.0, 0.0 ]
+          radius: 0.021
+        - center: [ 0.0, 0.0, 0.024 ]
+          radius: 0.021
+      robotiq_left_finger:
+        - center: [ 0.0, 0.0, -0.025 ]
+          radius: 0.021
+        - center: [ 0.0, 0.0, 0.0 ]
+          radius: 0.021
+        - center: [ 0.0, 0.0, 0.024 ]
+          radius: 0.021
+      robotiq_right_pad:
+        - center: [ 0.0, 0.0, -0.016 ]
+          radius: 0.018
+        - center: [ 0.0, 0.0, 0.016 ]
+          radius: 0.018
+      robotiq_left_pad:
+        - center: [ 0.0, 0.0, -0.016 ]
+          radius: 0.018
+        - center: [ 0.0, 0.0, 0.016 ]
+          radius: 0.018
+  ur7e_self_only_collision_spheres:
     spheres:
       shoulder_link:
         - center: [ 0.0, 0.0, -0.1 ]
           radius: 0.097
         - center: [ 0.0, 0.01, 0.0 ]
           radius: 0.107
-  ur10_self_collision_spheres:
-    clone: ["ur10_collision_spheres", "ur10_self_only_collision_spheres"]
+  ur7e_self_collision_spheres:
+    clone: ["ur7e_collision_spheres", "ur7e_self_only_collision_spheres"]

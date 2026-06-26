@@ -9,6 +9,7 @@ __pycache__/
 
 # data
 raw_data
+generated/
 
 # misc
 .vscode/*

@@ -70,7 +70,7 @@ rmp_params:
         damping_std_dev: .04
         damping_robustness_eps: 1e-2
         damping_velocity_gate_length_scale: .01
-        repulsion_gain: 1000.
+        repulsion_gain: 100. # tuned from 1000
         repulsion_std_dev: .01
         metric_modulation_radius: .5
         metric_scalar: 500.
@@ -99,4 +99,15 @@ body_collision_controllers:
     radius: .04
   - name: tool0
     radius: .04
-
+  - name: pinch_center
+    radius: .035
+  - name: robotiq_base
+    radius: .055
+  - name: robotiq_right_finger
+    radius: .03
+  - name: robotiq_left_finger
+    radius: .03
+  - name: robotiq_right_pad
+    radius: .025
+  - name: robotiq_left_pad
+    radius: .025

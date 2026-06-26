@@ -9,9 +9,11 @@ SCRIPTS_DIR = REPO_DIR / "scripts" / "isaac_cumotion"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
 from isaac6_cumotion_stream_server import (  # noqa: E402
+    DEFAULT_CONFIG_DIR,
     REQUEST_SCHEMA,
     PassThroughPolicy,
     _compute_response,
+    _load_collision_spheres,
     _opposite_side,
     _parse_sides,
     _quat_wxyz_rotation,
@@ -105,6 +107,18 @@ class TestIsaacCuMotionStreamServer(unittest.TestCase):
         self.assertEqual(response["policy"], "rmp")
         self.assertEqual(response["mode"], "hold")
         self.assertIn("input age", response["reason"])
+
+    def test_collision_spheres_include_robotiq_gripper(self):
+        spheres = _load_collision_spheres(DEFAULT_CONFIG_DIR / "robot.xrdf")
+        links = {link_name for link_name, _, _ in spheres}
+        self.assertIn("wrist_3_link", links)
+        self.assertIn("tool0", links)
+        self.assertIn("pinch_center", links)
+        self.assertIn("robotiq_base", links)
+        self.assertIn("robotiq_right_finger", links)
+        self.assertIn("robotiq_left_finger", links)
+        self.assertIn("robotiq_right_pad", links)
+        self.assertIn("robotiq_left_pad", links)
 
 
 if __name__ == "__main__":
