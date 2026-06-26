@@ -22,7 +22,6 @@ setup(
             'factr_teleop_franka = factr_teleop.factr_teleop_franka_zmq:main',
             'factr_teleop_ur7e = factr_teleop.factr_teleop_ur7e:main',
             'ur7e_collision_monitor = factr_teleop.ur7e_collision_monitor:main',
-            'isaac_rmpflow_zmq_bridge = factr_teleop.isaac_rmpflow_zmq_bridge:main',
             'isaac_rmpflow_stream_bridge = factr_teleop.isaac_rmpflow_stream_bridge:main',
             'factr_teleop_grav_comp_demo = factr_teleop.factr_teleop_grav_comp_demo:main',
             'return_ur_to_initial_match = factr_teleop.return_ur_to_initial_match:main',

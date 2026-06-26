@@ -29,31 +29,9 @@ collision monitor and the Isaac/Lula stream bridge publish the same
 `/factr_teleop/<side>/safe_ur_pos` topic, so do not run both while teleop is
 using `collision_safety:=true`.
 
-## Request/Response Debug Path
+## High-Rate Streaming Path
 
-The request/response bridge is useful for transport/debug bring-up because one
-request maps to one response. It is not the FACTR-style high-rate control path.
-Run it in `pass_through` and shadow mode first.
-
-Run this from the FACTR ROS environment:
-
-```bash
-cd /home/srianumakonda/FACTR_Teleop
-source factr_conda_env
-colcon build --packages-select factr_teleop
-source install/setup.bash
-
-ros2 launch launch/isaac_rmpflow_zmq_bridge.py \
-  active_sides:=right \
-  isaac_endpoint:=tcp://127.0.0.1:5557 \
-  request_hz:=100.0 \
-  state_timeout_s:=0.10 \
-  desired_timeout_s:=0.10 \
-  isaac_response_timeout_s:=0.05 \
-  publish_safe_targets:=false
-```
-
-The bridge should subscribe to the existing FACTR streams:
+The bridge subscribes to the existing FACTR streams:
 
 ```text
 /ur/<side>/obs_ur_state
@@ -70,32 +48,10 @@ The bridge should keep ROS topic data in real UR joint coordinates. Any Isaac
 joint-order, wrist-offset, frame, or base-pose conversion belongs inside the
 bridge/server boundary, not in the teleop loop.
 
-Run this from the Isaac Lab environment:
-
-```bash
-cd /home/srianumakonda/FACTR_Teleop
-
-ISAAC_CONDA_ENV=env_isaaclab \
-  bash scripts/isaac_rmpflow/run_lula_zmq_server.sh \
-  --mode pass_through \
-  --endpoint tcp://127.0.0.1:5557 \
-  --config-dir /home/srianumakonda/FACTR_Teleop/configs/isaac_rmpflow/maxlab_ur7e_right
-```
-
-Use `--mode pass_through` first to test the ZMQ/ROS transport without changing
-the desired target except for per-cycle step clipping. Use `--mode rmp` to load
-bundled Lula and the generated MaxLab primitive URDF/RMPFlow scaffold. The
-server does not import `rclpy`, talk to RTDE, or publish ROS topics.
-
 The current RMPFlow runtime is Isaac/Lula only. The previous experimental
 non-Isaac RMP mode was removed from `ur7e_collision_monitor.py`; that node now
 keeps only the older position/QP-style safety path with `velocity` and
 `posture` modes.
-
-## High-Rate Streaming Variant
-
-The request/response bridge above is useful for bring-up, but it is not the
-closest match to the original FACTR controller architecture. The closer path is:
 
 ```text
 FACTR ROS topics        latest input stream        Isaac/Lula process
@@ -198,35 +154,11 @@ validation, run a left-state publisher and keep `--require-other-arm-state` in
 the stream-server command so missing left observations fail closed. Omitting
 `--require-other-arm-state` is only for static-left/static-other-arm tests.
 
-Offline Lula obstacle sanity check:
-
-```bash
-cd /home/srianumakonda/FACTR_Teleop
-source /home/srianumakonda/anaconda3/etc/profile.d/conda.sh
-conda activate env_isaaclab
-export PYTHONPATH=/home/srianumakonda/FACTR_Teleop/scripts/isaac_rmpflow:/home/srianumakonda/anaconda3/envs/env_isaaclab/lib/python3.11/site-packages/isaacsim/exts/isaacsim.robot_motion.lula/pip_prebundle:${PYTHONPATH:-}
-export LD_LIBRARY_PATH=/home/srianumakonda/anaconda3/envs/env_isaaclab/lib/python3.11/site-packages/isaacsim/exts/isaacsim.robot_motion.lula/pip_prebundle/_lula_libs:${LD_LIBRARY_PATH:-}
-
-python scripts/isaac_rmpflow/probe_lula_obstacle_response.py --fail-if-no-effect
-```
-
-Local fake-ROS streaming smoke test:
-
-```bash
-cd /home/srianumakonda/FACTR_Teleop
-source ./factr_conda_env
-source install/setup.bash
-
-python scripts/isaac_rmpflow/run_stream_bridge_smoke_test.py \
-  --duration-s 2.0 \
-  --min-safe-count 20
-```
-
 ## ZMQ Pattern
 
-Use blocking `REQ/REP` for the first bring-up because it is easy to reason
-about and makes one request map to one response. Keep the timeout short enough
-that a stuck Isaac frame cannot feed stale targets to the robot.
+Use the streaming PUB/SUB path for RMPFlow bring-up. Keep ROS-side stale-output
+timeouts short enough that a stuck Isaac process cannot feed stale targets to
+the robot.
 
 Recommended defaults:
 

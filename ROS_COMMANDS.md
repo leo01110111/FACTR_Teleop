@@ -106,46 +106,6 @@ with the MaxLab table/plates/board, dual UR7e base poses, primitive Robotiq
 grippers, FACTR initial joint-vector metadata, and Lula collision-sphere
 overlays.
 
-This request/response path is for transport/debug bring-up. Start in
-`--mode pass_through` and shadow mode. Use the high-rate streaming workflow
-below for the FACTR-style controller.
-
-Terminal 1, Isaac/Lula server:
-
-```bash
-cd /home/srianumakonda/FACTR_Teleop
-
-bash scripts/isaac_rmpflow/run_lula_zmq_server.sh \
-  --mode pass_through \
-  --endpoint tcp://127.0.0.1:5557
-```
-
-Terminal 2, ROS/ZMQ bridge:
-
-```bash
-cd /home/srianumakonda/FACTR_Teleop
-source ./factr_conda_env
-source install/setup.bash
-
-ros2 launch launch/isaac_rmpflow_zmq_bridge.py \
-  active_sides:=right \
-  isaac_endpoint:=tcp://127.0.0.1:5557 \
-  request_hz:=100.0 \
-  publish_safe_targets:=false
-```
-
-For this debug path, run right teleop normally while shadowing the bridge:
-
-```bash
-cd /home/srianumakonda/FACTR_Teleop
-source ./factr_conda_env
-source install/setup.bash
-
-ros2 launch launch/factr_teleop_ur7e.py \
-  config_file:=ur7e_leader_right.yaml \
-  node_name:=factr_teleop_ur7e_right
-```
-
 ## Right UR7e Teleop With High-Rate Isaac/Lula RMPFlow Stream
 
 This is the FACTR-style architecture: the Isaac/Lula process owns a fixed-rate
@@ -256,31 +216,6 @@ ros2 launch launch/factr_teleop_ur7e.py \
 
 For shadow mode, run the same teleop command without `collision_safety:=true`
 so normal FACTR motion continues while the RMPFlow stream is observed.
-
-Offline Lula obstacle sanity check:
-
-```bash
-cd /home/srianumakonda/FACTR_Teleop
-
-source /home/srianumakonda/anaconda3/etc/profile.d/conda.sh
-conda activate env_isaaclab
-export PYTHONPATH=/home/srianumakonda/FACTR_Teleop/scripts/isaac_rmpflow:/home/srianumakonda/anaconda3/envs/env_isaaclab/lib/python3.11/site-packages/isaacsim/exts/isaacsim.robot_motion.lula/pip_prebundle:${PYTHONPATH:-}
-export LD_LIBRARY_PATH=/home/srianumakonda/anaconda3/envs/env_isaaclab/lib/python3.11/site-packages/isaacsim/exts/isaacsim.robot_motion.lula/pip_prebundle/_lula_libs:${LD_LIBRARY_PATH:-}
-
-python scripts/isaac_rmpflow/probe_lula_obstacle_response.py --fail-if-no-effect
-```
-
-Local fake-ROS stream bridge smoke test:
-
-```bash
-cd /home/srianumakonda/FACTR_Teleop
-source ./factr_conda_env
-source install/setup.bash
-
-python scripts/isaac_rmpflow/run_stream_bridge_smoke_test.py \
-  --duration-s 2.0 \
-  --min-safe-count 20
-```
 
 ## Return Right UR To Initial Match Pose
 

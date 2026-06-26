@@ -48,22 +48,10 @@ sphere overlays. It also stores the FACTR real and wrist-offset sim initial
 joint vectors as `factr:initial_q_real` and `factr:initial_q_sim` attributes on
 `/World/left_ur7e` and `/World/right_ur7e`.
 
-## Isaac/Lula RMPFlow ZMQ Server
+## Isaac/Lula RMPFlow Stream Server
 
-The request/response RMPFlow server uses bundled Lula directly and communicates
-with FACTR ROS through ZMQ. Use this path for transport/debug bring-up in
-`pass_through` mode before any active robot command path.
-
-```bash
-cd /home/srianumakonda/FACTR_Teleop
-bash scripts/isaac_rmpflow/run_lula_zmq_server.sh \
-  --mode pass_through \
-  --endpoint tcp://127.0.0.1:5557
-```
-
-For the higher-rate FACTR-style controller loop, use the streaming server
-instead. It consumes the latest observed/desired joint state stream and runs
-RMPFlow on its own fixed loop:
+The streaming server consumes the latest observed/desired joint state stream
+from FACTR ROS and runs RMPFlow on its own fixed loop:
 
 ```bash
 cd /home/srianumakonda/FACTR_Teleop
@@ -102,18 +90,6 @@ low, and `missing_required_topics` and `stale_required_topics` are empty. Then
 use `publish_safe_targets:=true` as the first active bridge command path, with
 `max_joint_step_rad:=0.05` and `max_safe_target_distance_rad:=0.05` for initial
 hardware bring-up.
-
-Offline collision-RMP sanity check:
-
-```bash
-cd /home/srianumakonda/FACTR_Teleop
-source /home/srianumakonda/anaconda3/etc/profile.d/conda.sh
-conda activate env_isaaclab
-export PYTHONPATH=/home/srianumakonda/FACTR_Teleop/scripts/isaac_rmpflow:/home/srianumakonda/anaconda3/envs/env_isaaclab/lib/python3.11/site-packages/isaacsim/exts/isaacsim.robot_motion.lula/pip_prebundle:${PYTHONPATH:-}
-export LD_LIBRARY_PATH=/home/srianumakonda/anaconda3/envs/env_isaaclab/lib/python3.11/site-packages/isaacsim/exts/isaacsim.robot_motion.lula/pip_prebundle/_lula_libs:${LD_LIBRARY_PATH:-}
-
-python scripts/isaac_rmpflow/probe_lula_obstacle_response.py --fail-if-no-effect
-```
 
 ## MJCF Importer Debug Path
 
