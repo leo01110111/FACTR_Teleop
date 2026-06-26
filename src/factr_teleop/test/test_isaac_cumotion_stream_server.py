@@ -5,20 +5,21 @@ from pathlib import Path
 
 
 REPO_DIR = Path(__file__).resolve().parents[3]
-SCRIPTS_DIR = REPO_DIR / "scripts" / "isaac_rmpflow"
+SCRIPTS_DIR = REPO_DIR / "scripts" / "isaac_cumotion"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
-from isaac_rmpflow_stream_server import (  # noqa: E402
+from isaac6_cumotion_stream_server import (  # noqa: E402
     REQUEST_SCHEMA,
     PassThroughPolicy,
     _compute_response,
     _opposite_side,
     _parse_sides,
+    _quat_wxyz_rotation,
+    _yaw_rotation,
 )
-from isaac_rmpflow_zmq_server import _quat_wxyz_multiply, _quat_wxyz_rotation, _yaw_rotation  # noqa: E402
 
 
-class TestIsaacRmpflowStreamServer(unittest.TestCase):
+class TestIsaacCuMotionStreamServer(unittest.TestCase):
     def _request(self, *, stamp=None, desired=None):
         desired = desired if desired is not None else [0.01, -0.02, 0.03, 0.0, 0.0, 0.01]
         return {
@@ -49,18 +50,14 @@ class TestIsaacRmpflowStreamServer(unittest.TestCase):
         yaw_rotation = _yaw_rotation(-1.57079632679)
         self.assertTrue((abs(quat_rotation - yaw_rotation) < 1e-6).all())
 
-    def test_mount_and_mjcf_base_quaternion_composes_to_lula_base(self):
-        composed = _quat_wxyz_multiply([0.70710678, 0.0, 0.0, -0.70710678], [0.0, 0.0, 0.0, -1.0])
-        composed_rotation = _quat_wxyz_rotation(composed)
-        expected_rotation = _yaw_rotation(1.57079632679)
-        self.assertTrue((abs(composed_rotation - expected_rotation) < 1e-6).all())
-
     def test_pass_through_response(self):
         response = _compute_response(
             PassThroughPolicy(),
             self._request(),
             controller_dt=0.002,
             stale_after_s=0.10,
+            require_other_arm_state=False,
+            policy_name="pass_through",
         )
         self.assertTrue(response["ok"])
         self.assertEqual(response["sequence"], 42)
@@ -74,6 +71,8 @@ class TestIsaacRmpflowStreamServer(unittest.TestCase):
             self._request(desired=[0.2, 0.0, 0.0, 0.0, 0.0, 0.0]),
             controller_dt=0.002,
             stale_after_s=0.10,
+            require_other_arm_state=False,
+            policy_name="pass_through",
         )
         self.assertTrue(response["ok"])
         self.assertEqual(response["policy"], "pass_through")
@@ -87,6 +86,7 @@ class TestIsaacRmpflowStreamServer(unittest.TestCase):
             self._request(),
             controller_dt=0.002,
             stale_after_s=0.10,
+            require_other_arm_state=False,
             policy_name="rmp",
         )
         self.assertTrue(response["ok"])
@@ -98,6 +98,7 @@ class TestIsaacRmpflowStreamServer(unittest.TestCase):
             self._request(stamp=time.time() - 1.0),
             controller_dt=0.002,
             stale_after_s=0.10,
+            require_other_arm_state=False,
             policy_name="rmp",
         )
         self.assertFalse(response["ok"])

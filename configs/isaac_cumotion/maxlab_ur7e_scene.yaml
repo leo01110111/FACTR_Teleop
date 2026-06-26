@@ -1,4 +1,4 @@
-# MaxLab dual-UR7e scene metadata for Isaac/Lula RMPFlow setup.
+# MaxLab dual-UR7e scene metadata for Isaac Sim 6 cuMotion RMPFlow setup.
 #
 # The UR arm source path keeps the legacy "ur5e" name, but MaxLab comments say
 # this model is retuned and should be treated as UR7e for this project.
@@ -7,8 +7,6 @@ assets:
   maxlab_builder: /home/srianumakonda/maxlab/sim/build_urtable.py
   source_arm_mjcf: /home/srianumakonda/maxlab/sim/universal_robots_ur5e/ur5e.xml
   source_gripper_mjcf: /home/srianumakonda/maxlab/sim/gripper/robotiq-2f85.xml
-  generated_mjcf: /home/srianumakonda/FACTR_Teleop/generated/isaac_rmpflow/maxlab_dual_ur7e_table.xml
-  generated_usd: /home/srianumakonda/FACTR_Teleop/generated/isaac_rmpflow/maxlab_dual_ur7e_table.usd
 
 table:
   board_top_z: 0.775
@@ -20,7 +18,7 @@ bases:
     yaw_rad: 1.57079632679
     quat_wxyz: [0.70710678, 0.0, 0.0, 0.70710678]
     mjcf_base_quat_wxyz: [0.0, 0.0, 0.0, -1.0]
-    world_from_lula_base:
+    world_from_backend_base:
       pos: [-0.7425, -0.005, 0.766]
       yaw_rad: -1.57079632679
       quat_wxyz: [0.70710678, 0.0, 0.0, -0.70710678]
@@ -29,7 +27,7 @@ bases:
     yaw_rad: -1.57079632679
     quat_wxyz: [0.70710678, 0.0, 0.0, -0.70710678]
     mjcf_base_quat_wxyz: [0.0, 0.0, 0.0, -1.0]
-    world_from_lula_base:
+    world_from_backend_base:
       pos: [0.7425, -0.005, 0.766]
       yaw_rad: 1.57079632679
       quat_wxyz: [0.70710678, 0.0, 0.0, 0.70710678]

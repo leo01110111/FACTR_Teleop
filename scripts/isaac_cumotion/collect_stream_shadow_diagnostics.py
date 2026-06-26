@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Collect stream-bridge shadow diagnostics for hardware bring-up.
 
-Run this while the Isaac/Lula stream server and ROS stream bridge are running.
+Run this while the Isaac Sim 6 cuMotion stream server and ROS bridge are running.
 It subscribes to the topics needed to prove the shadow path is healthy before
 enabling `publish_safe_targets:=true` and `collision_safety:=true`.
 """
@@ -49,7 +49,7 @@ def _stats(values: Iterable[float]) -> dict:
 
 class ShadowDiagnostics(Node):
     def __init__(self, *, active_sides: tuple[str, ...]) -> None:
-        super().__init__("isaac_rmpflow_shadow_diagnostics")
+        super().__init__("isaac_cumotion_shadow_diagnostics")
         self._active_sides = active_sides
         self._start_mono = time.monotonic()
         self._last_seen: dict[str, float] = {}
@@ -62,10 +62,10 @@ class ShadowDiagnostics(Node):
         self._last_status = None
         self._last_reason = None
 
-        self.create_subscription(String, "/factr_teleop/isaac_rmpflow_stream/status", self._status_cb, 10)
-        self.create_subscription(String, "/factr_teleop/isaac_rmpflow_stream/reason", self._reason_cb, 10)
-        self.create_subscription(Float32, "/factr_teleop/isaac_rmpflow_stream/controller_hz", self._controller_hz_cb, 10)
-        self.create_subscription(Float32, "/factr_teleop/isaac_rmpflow_stream/input_age_ms", self._input_age_cb, 10)
+        self.create_subscription(String, "/factr_teleop/isaac_cumotion_stream/status", self._status_cb, 10)
+        self.create_subscription(String, "/factr_teleop/isaac_cumotion_stream/reason", self._reason_cb, 10)
+        self.create_subscription(Float32, "/factr_teleop/isaac_cumotion_stream/controller_hz", self._controller_hz_cb, 10)
+        self.create_subscription(Float32, "/factr_teleop/isaac_cumotion_stream/input_age_ms", self._input_age_cb, 10)
 
         for side in SIDES:
             self.create_subscription(
@@ -88,7 +88,7 @@ class ShadowDiagnostics(Node):
             )
             self.create_subscription(
                 Float32,
-                f"/factr_teleop/{side}/isaac_stream_safe_error",
+                f"/factr_teleop/{side}/isaac_cumotion_safe_error",
                 lambda msg, side=side: self._safe_error_cb(side, msg),
                 10,
             )

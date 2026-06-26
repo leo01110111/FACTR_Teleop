@@ -1,22 +1,44 @@
 # Isaac Sim 6 / cuMotion RMPFlow Setup For MaxLab UR7e
 
-This directory is the Isaac Sim 6 cuMotion bring-up path. It intentionally
-coexists with the Isaac 5.1 Lula setup under `configs/isaac_rmpflow/`.
+This directory is the active Isaac Sim 6 cuMotion bring-up path for FACTR UR7e
+collision-aware teleop. The legacy backend has been removed from this checkout.
 
-The current scaffold uses:
+The current backend uses:
 
 - `env_isaaclab6`
 - Isaac Sim 6 `isaacsim.robot_motion.cumotion`
-- the generated MaxLab UR7e primitive URDF from the 5.1 bring-up
-- cuMotion's stock UR10 XRDF/RMPFlow config shape as a starting point
+- `configs/isaac_cumotion/maxlab_ur7e_right/robot.urdf`
+- `configs/isaac_cumotion/maxlab_ur7e_right/robot.xrdf`
+- `configs/isaac_cumotion/maxlab_ur7e_right/rmp_flow.yaml`
+- `configs/isaac_cumotion/maxlab_ur7e_scene.yaml`
 
-It has passed a headless synthetic bimanual request/response smoke test, but it
-has not been validated on hardware. Treat it as a validation-stage backend until
-the frames, collision spheres, and gains are checked.
+It has passed headless synthetic request/response smoke testing, but the XRDF
+collision spheres, base transforms, wrist offsets, and gains still need visual
+and hardware validation before treating bimanual collision avoidance as trusted.
+
+## Viewer
+
+Run this before robot deployment to inspect the configured table, UR bases, and
+XRDF collision spheres in Isaac Sim 6:
+
+```bash
+cd /home/srianumakonda/FACTR_Teleop
+
+bash scripts/isaac_cumotion/run_cumotion_viewer.sh
+```
+
+For a headless USD export:
+
+```bash
+bash scripts/isaac_cumotion/run_cumotion_viewer.sh \
+  --headless \
+  --duration-s 0.1 \
+  --output-usd /tmp/maxlab_cumotion_scene.usd
+```
 
 ## Stream Server
 
-Terminal 1, Isaac 6 / cuMotion RMPFlow:
+Terminal 1, Isaac Sim 6 / cuMotion RMPFlow:
 
 ```bash
 cd /home/srianumakonda/FACTR_Teleop
@@ -26,26 +48,26 @@ bash scripts/isaac_cumotion/run_cumotion_stream_server.sh \
   --input-endpoint tcp://127.0.0.1:5568 \
   --output-endpoint tcp://127.0.0.1:5569 \
   --loop-hz 500.0 \
-  --stale-input-timeout-s 5.0 \
+  --stale-input-timeout-s 0.5 \
   --policy-sides left,right \
   --dynamic-other-arm-obstacles \
   --require-other-arm-state
 ```
 
-Terminal 2, the same ROS stream bridge, pointed at the cuMotion ports:
+Terminal 2, ROS stream bridge:
 
 ```bash
 cd /home/srianumakonda/FACTR_Teleop
 source ./factr_conda_env
 source install/setup.bash
 
-ros2 launch launch/isaac_rmpflow_stream_bridge.py \
+ros2 launch launch/isaac_cumotion_stream_bridge.py \
   active_sides:=left,right \
-  input_endpoint:=tcp://127.0.0.1:5568 \
-  output_endpoint:=tcp://127.0.0.1:5569 \
-  publish_hz:=150.0 \
+  publish_hz:=250.0 \
   publish_safe_targets:=true \
-  safe_response_timeout_s:=5.0 \
+  state_timeout_s:=0.5 \
+  desired_timeout_s:=0.5 \
+  safe_response_timeout_s:=0.5 \
   hold_stale_state:=true \
   hold_stale_desired:=true
 ```
@@ -53,11 +75,29 @@ ros2 launch launch/isaac_rmpflow_stream_bridge.py \
 Terminals 3 and 4 are the normal FACTR UR7e teleop nodes with
 `collision_safety:=true`.
 
+## Diagnostics
+
+Bridge diagnostics are published under:
+
+```text
+/factr_teleop/isaac_cumotion_stream/status
+/factr_teleop/isaac_cumotion_stream/reason
+/factr_teleop/isaac_cumotion_stream/controller_hz
+/factr_teleop/isaac_cumotion_stream/input_age_ms
+```
+
+Collect a summary with:
+
+```bash
+python scripts/isaac_cumotion/collect_stream_shadow_diagnostics.py \
+  --active-sides left,right \
+  --duration-s 30 \
+  --output-json /tmp/isaac_cumotion_shadow_bimanual.json
+```
+
 ## Notes
 
-- The ROS bridge is backend-agnostic. It only needs matching ZMQ endpoints.
-- Do not run the 5.1 Lula stream server and this 6.0 cuMotion stream server on
-  the same endpoint pair.
-- `pyzmq` is installed in `env_isaaclab6` for this ZMQ server.
-- The cuMotion server is pure headless Python and does not instantiate
-  `SimulationApp`.
+- The ROS bridge is backend-specific now: use `launch/isaac_cumotion_stream_bridge.py`.
+- `pyzmq` must be installed in `env_isaaclab6`.
+- The stream server is headless Python and does not instantiate `SimulationApp`.
+- Use `scripts/isaac_cumotion/run_cumotion_viewer.sh` for visual inspection.

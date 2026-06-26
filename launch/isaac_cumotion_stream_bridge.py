@@ -13,13 +13,13 @@ def generate_launch_description():
     )
     input_endpoint_arg = DeclareLaunchArgument(
         "input_endpoint",
-        default_value="tcp://127.0.0.1:5558",
-        description="ZMQ endpoint where the Isaac stream server receives latest state/desired inputs.",
+        default_value="tcp://127.0.0.1:5568",
+        description="ZMQ endpoint where the Isaac Sim 6 cuMotion server receives latest state/desired inputs.",
     )
     output_endpoint_arg = DeclareLaunchArgument(
         "output_endpoint",
-        default_value="tcp://127.0.0.1:5559",
-        description="ZMQ endpoint where the Isaac stream server publishes safe targets.",
+        default_value="tcp://127.0.0.1:5569",
+        description="ZMQ endpoint where the Isaac Sim 6 cuMotion server publishes safe targets.",
     )
     publish_hz_arg = DeclareLaunchArgument(
         "publish_hz",
@@ -79,8 +79,8 @@ def generate_launch_description():
 
     bridge = Node(
         package="factr_teleop",
-        executable="isaac_rmpflow_stream_bridge",
-        name="isaac_rmpflow_stream_bridge",
+        executable="isaac_cumotion_stream_bridge",
+        name="isaac_cumotion_stream_bridge",
         output="screen",
         emulate_tty=True,
         parameters=[

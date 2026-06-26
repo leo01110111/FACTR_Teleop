@@ -1,4 +1,4 @@
-"""ROS bridge for the high-rate Isaac/Lula streaming RMPFlow controller."""
+"""ROS bridge for the high-rate Isaac Sim 6 cuMotion RMPFlow controller."""
 
 from __future__ import annotations
 
@@ -14,8 +14,8 @@ from sensor_msgs.msg import JointState
 from std_msgs.msg import Float32, String
 
 
-REQUEST_SCHEMA = "factr.isaac_rmpflow.request.v1"
-RESPONSE_SCHEMA = "factr.isaac_rmpflow.response.v1"
+REQUEST_SCHEMA = "factr.isaac_cumotion.request.v1"
+RESPONSE_SCHEMA = "factr.isaac_cumotion.response.v1"
 SIDES = ("left", "right")
 
 
@@ -37,13 +37,13 @@ def _float_msg(value: float) -> Float32:
     return msg
 
 
-class IsaacRmpflowStreamBridge(Node):
+class IsaacCuMotionStreamBridge(Node):
     def __init__(self) -> None:
-        super().__init__("isaac_rmpflow_stream_bridge")
+        super().__init__("isaac_cumotion_stream_bridge")
 
         self.declare_parameter("active_sides", "right")
-        self.declare_parameter("input_endpoint", "tcp://127.0.0.1:5558")
-        self.declare_parameter("output_endpoint", "tcp://127.0.0.1:5559")
+        self.declare_parameter("input_endpoint", "tcp://127.0.0.1:5568")
+        self.declare_parameter("output_endpoint", "tcp://127.0.0.1:5569")
         self.declare_parameter("publish_hz", 500.0)
         self.declare_parameter("state_timeout_s", 0.10)
         self.declare_parameter("desired_timeout_s", 0.10)
@@ -96,12 +96,12 @@ class IsaacRmpflowStreamBridge(Node):
             "left": self.create_publisher(JointState, str(self.get_parameter("left_safe_topic").value), 10),
             "right": self.create_publisher(JointState, str(self.get_parameter("right_safe_topic").value), 10),
         }
-        self._status_pub = self.create_publisher(String, "/factr_teleop/isaac_rmpflow_stream/status", 10)
-        self._reason_pub = self.create_publisher(String, "/factr_teleop/isaac_rmpflow_stream/reason", 10)
-        self._controller_hz_pub = self.create_publisher(Float32, "/factr_teleop/isaac_rmpflow_stream/controller_hz", 10)
-        self._input_age_pub = self.create_publisher(Float32, "/factr_teleop/isaac_rmpflow_stream/input_age_ms", 10)
+        self._status_pub = self.create_publisher(String, "/factr_teleop/isaac_cumotion_stream/status", 10)
+        self._reason_pub = self.create_publisher(String, "/factr_teleop/isaac_cumotion_stream/reason", 10)
+        self._controller_hz_pub = self.create_publisher(Float32, "/factr_teleop/isaac_cumotion_stream/controller_hz", 10)
+        self._input_age_pub = self.create_publisher(Float32, "/factr_teleop/isaac_cumotion_stream/input_age_ms", 10)
         self._safe_error_pub = {
-            side: self.create_publisher(Float32, f"/factr_teleop/{side}/isaac_stream_safe_error", 10)
+            side: self.create_publisher(Float32, f"/factr_teleop/{side}/isaac_cumotion_safe_error", 10)
             for side in SIDES
         }
 
@@ -123,7 +123,7 @@ class IsaacRmpflowStreamBridge(Node):
         publish_hz = max(float(self.get_parameter("publish_hz").value), 1.0)
         self.create_timer(1.0 / publish_hz, self._tick)
         self.get_logger().info(
-            "Isaac streaming RMPFlow bridge ready: "
+            "Isaac Sim 6 cuMotion streaming RMPFlow bridge ready: "
             f"input={self._input_endpoint}, output={self._output_endpoint}, "
             f"active_sides={','.join(self._active_sides)}, publish_hz={publish_hz:.1f}, "
             f"publish_safe_targets={self._publish_safe_targets}, "
@@ -333,7 +333,7 @@ class IsaacRmpflowStreamBridge(Node):
 
 def main(args=None) -> None:
     rclpy.init(args=args)
-    node = IsaacRmpflowStreamBridge()
+    node = IsaacCuMotionStreamBridge()
     try:
         rclpy.spin(node)
     except (KeyboardInterrupt, ExternalShutdownException):

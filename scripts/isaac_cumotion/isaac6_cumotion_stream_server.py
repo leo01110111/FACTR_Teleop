@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """Isaac Sim 6 / cuMotion streaming RMPFlow server for FACTR UR7e.
 
-This intentionally lives beside, not instead of, the Isaac 5.1 Lula server in
-``scripts/isaac_rmpflow``.  It speaks the same ZMQ request/response schema used
-by ``isaac_rmpflow_stream_bridge.py`` so the ROS side can be reused unchanged.
+It speaks the same FACTR ZMQ request/response schema used by the ROS bridge.
 """
 
 from __future__ import annotations
@@ -21,11 +19,11 @@ import yaml
 import zmq
 
 
-REQUEST_SCHEMA = "factr.isaac_rmpflow.request.v1"
-RESPONSE_SCHEMA = "factr.isaac_rmpflow.response.v1"
+REQUEST_SCHEMA = "factr.isaac_cumotion.request.v1"
+RESPONSE_SCHEMA = "factr.isaac_cumotion.response.v1"
 REPO_DIR = Path("/home/srianumakonda/FACTR_Teleop")
 DEFAULT_CONFIG_DIR = REPO_DIR / "configs/isaac_cumotion/maxlab_ur7e_right"
-DEFAULT_SCENE_METADATA = REPO_DIR / "configs/isaac_rmpflow/maxlab_ur7e_scene.yaml"
+DEFAULT_SCENE_METADATA = REPO_DIR / "configs/isaac_cumotion/maxlab_ur7e_scene.yaml"
 DEFAULT_INPUT_ENDPOINT = "tcp://127.0.0.1:5568"
 DEFAULT_OUTPUT_ENDPOINT = "tcp://127.0.0.1:5569"
 SIDES = ("left", "right")
@@ -295,7 +293,7 @@ class OtherArmObstacleField:
         return len(self._handles)
 
     def _base_transform(self, base_config: dict) -> tuple[np.ndarray, np.ndarray]:
-        transform = base_config.get("world_from_lula_base", base_config)
+        transform = base_config.get("world_from_backend_base", base_config)
         translation = np.asarray(transform["pos"], dtype=np.float64)
         if "quat_wxyz" in transform:
             return _quat_wxyz_rotation(transform["quat_wxyz"]), translation
