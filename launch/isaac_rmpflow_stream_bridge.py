@@ -28,17 +28,17 @@ def generate_launch_description():
     )
     state_timeout_s_arg = DeclareLaunchArgument(
         "state_timeout_s",
-        default_value="0.10",
+        default_value="1.00",
         description="Maximum age for /ur/<side>/obs_ur_state before holding.",
     )
     desired_timeout_s_arg = DeclareLaunchArgument(
         "desired_timeout_s",
-        default_value="0.10",
+        default_value="1.00",
         description="Maximum age for desired_ur_pos before holding.",
     )
     safe_response_timeout_s_arg = DeclareLaunchArgument(
         "safe_response_timeout_s",
-        default_value="0.10",
+        default_value="5.00",
         description="Maximum age for streamed Isaac safe output before holding.",
     )
     max_joint_step_rad_arg = DeclareLaunchArgument(
@@ -65,6 +65,16 @@ def generate_launch_description():
         "require_rmp_policy",
         default_value="true",
         description="If true, active safe-target publishing rejects non-RMP stream policies.",
+    )
+    hold_stale_state_arg = DeclareLaunchArgument(
+        "hold_stale_state",
+        default_value="true",
+        description="If true, keep streaming the last known q for a side whose state update is late.",
+    )
+    hold_stale_desired_arg = DeclareLaunchArgument(
+        "hold_stale_desired",
+        default_value="true",
+        description="If true, hold current q for a side whose desired target is missing/stale instead of dropping all input.",
     )
 
     bridge = Node(
@@ -96,6 +106,8 @@ def generate_launch_description():
             {"max_sequence_lag": ParameterValue(LaunchConfiguration("max_sequence_lag"), value_type=int)},
             {"publish_safe_targets": ParameterValue(LaunchConfiguration("publish_safe_targets"), value_type=bool)},
             {"require_rmp_policy": ParameterValue(LaunchConfiguration("require_rmp_policy"), value_type=bool)},
+            {"hold_stale_state": ParameterValue(LaunchConfiguration("hold_stale_state"), value_type=bool)},
+            {"hold_stale_desired": ParameterValue(LaunchConfiguration("hold_stale_desired"), value_type=bool)},
         ],
     )
 
@@ -112,5 +124,7 @@ def generate_launch_description():
         max_sequence_lag_arg,
         publish_safe_targets_arg,
         require_rmp_policy_arg,
+        hold_stale_state_arg,
+        hold_stale_desired_arg,
         bridge,
     ])

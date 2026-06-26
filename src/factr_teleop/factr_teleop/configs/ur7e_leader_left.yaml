@@ -18,8 +18,8 @@ arm_teleop:
   leader_urdf: "factr_teleop_ur5_gello.urdf"
   #For the follower arm (UR servoJ params, read from arm_teleop.servo)
   servo:
-    lookahead_time: 0.1
-    gain: 300.0
+    lookahead_time: 0.05
+    gain: 500.0
     watchdog_min_frequency: 20.0
   num_arm_joints: 6
   # UR e-series joints: +/- 2*pi (+/- 360 deg). Tighten if the GELLO's range is smaller.

@@ -33,6 +33,7 @@ ROBOTIQ_BOXES = [
     ("robotiq_right_pad", "robotiq_right_finger", [0.0, -0.006, 0.052], [0.0, 0.0, 0.0], [0.022, 0.008, 0.056], "0.004", "robotiq_pad"),
     ("robotiq_left_pad", "robotiq_left_finger", [0.0, 0.006, 0.052], [0.0, 0.0, 0.0], [0.022, 0.008, 0.056], "0.004", "robotiq_pad"),
 ]
+PINCH_CENTER_FROM_TOOL0 = [0.0, 0.0, 0.165]
 
 
 def _numbers(value: str | None, default: list[float]) -> list[float]:
@@ -207,6 +208,29 @@ def _add_robotiq_primitive(robot: ET.Element) -> None:
         _fixed_joint(robot, f"{parent}_to_{name}", parent, name, xyz, rpy)
 
 
+def _add_pinch_center_frame(robot: ET.Element) -> None:
+    """Add a visual-only frame at the primitive Robotiq pad midpoint.
+
+    This frame is for validating the tool/TCP geometry in Isaac before choosing
+    whether RMPFlow should target the gripper pinch point instead of tool0.
+    """
+    link = ET.SubElement(robot, "link", {"name": "pinch_center"})
+    inertial = ET.SubElement(link, "inertial")
+    ET.SubElement(inertial, "mass", {"value": "0.001"})
+    ET.SubElement(inertial, "origin", {"xyz": "0 0 0", "rpy": "0 0 0"})
+    ET.SubElement(
+        inertial,
+        "inertia",
+        {"ixx": "0.000001", "ixy": "0", "ixz": "0", "iyy": "0.000001", "iyz": "0", "izz": "0.000001"},
+    )
+    visual = ET.SubElement(link, "visual", {"name": "pinch_center_marker"})
+    ET.SubElement(visual, "origin", {"xyz": "0 0 0", "rpy": "0 0 0"})
+    geometry = ET.SubElement(visual, "geometry")
+    ET.SubElement(geometry, "sphere", {"radius": "0.008"})
+    ET.SubElement(visual, "material", {"name": "pinch_green"})
+    _fixed_joint(robot, "tool0_to_pinch_center", "tool0", "pinch_center", PINCH_CENTER_FROM_TOOL0, [0.0, 0.0, 0.0])
+
+
 def _joint_limits(name: str, mjcf_class: str | None) -> dict[str, str]:
     lower, upper = (-6.28319, 6.28319)
     if name == "elbow_joint" or mjcf_class == "size3_limited":
@@ -252,6 +276,7 @@ def export_urdf(input_path: Path, output_path: Path) -> None:
     ET.SubElement(robot, "material", {"name": "robotiq_black"}).append(ET.Element("color", {"rgba": "0.05 0.05 0.05 1"}))
     ET.SubElement(robot, "material", {"name": "robotiq_gray"}).append(ET.Element("color", {"rgba": "0.46 0.46 0.46 1"}))
     ET.SubElement(robot, "material", {"name": "robotiq_pad"}).append(ET.Element("color", {"rgba": "0.18 0.18 0.18 1"}))
+    ET.SubElement(robot, "material", {"name": "pinch_green"}).append(ET.Element("color", {"rgba": "0.1 0.8 0.25 1"}))
     _walk(robot, base)
 
     tool = ET.SubElement(robot, "link", {"name": "tool0"})
@@ -275,6 +300,7 @@ def export_urdf(input_path: Path, output_path: Path) -> None:
     ET.SubElement(tool_joint, "parent", {"link": "wrist_3_link"})
     ET.SubElement(tool_joint, "child", {"link": "tool0"})
     ET.SubElement(tool_joint, "origin", {"xyz": "0 0.1 0", "rpy": "3.141592654 0 -1.570796327"})
+    _add_pinch_center_frame(robot)
     _add_robotiq_primitive(robot)
 
     tree = ET.ElementTree(robot)

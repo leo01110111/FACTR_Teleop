@@ -53,6 +53,8 @@ class IsaacRmpflowStreamBridge(Node):
         self.declare_parameter("max_sequence_lag", 2)
         self.declare_parameter("publish_safe_targets", False)
         self.declare_parameter("require_rmp_policy", True)
+        self.declare_parameter("hold_stale_state", True)
+        self.declare_parameter("hold_stale_desired", True)
         self.declare_parameter("left_state_topic", "/ur/left/obs_ur_state")
         self.declare_parameter("right_state_topic", "/ur/right/obs_ur_state")
         self.declare_parameter("left_desired_topic", "/factr_teleop/left/desired_ur_pos")
@@ -71,6 +73,8 @@ class IsaacRmpflowStreamBridge(Node):
         self._max_sequence_lag = max(int(self.get_parameter("max_sequence_lag").value), 0)
         self._publish_safe_targets = bool(self.get_parameter("publish_safe_targets").value)
         self._require_rmp_policy = bool(self.get_parameter("require_rmp_policy").value)
+        self._hold_stale_state = bool(self.get_parameter("hold_stale_state").value)
+        self._hold_stale_desired = bool(self.get_parameter("hold_stale_desired").value)
         self._sequence = 0
         self._last_sent_sequence = -1
         self._last_safe_sequence = -1
@@ -171,19 +175,32 @@ class IsaacRmpflowStreamBridge(Node):
         arms = {}
         observed_arms = {}
         for side in self._active_sides:
-            if side not in self._latest_state or side not in self._latest_desired:
-                self._publish_status("waiting", f"missing {side} state or desired")
+            if side not in self._latest_state:
+                self._publish_status("waiting", f"missing {side} state")
                 return None
             q_current, state_t = self._latest_state[side]
-            q_desired, desired_t = self._latest_desired[side]
             state_age = now_mono - state_t
-            desired_age = now_mono - desired_t
             if state_age > self._state_timeout_s:
-                self._publish_status("stale_input", f"{side} state age {state_age:.3f}s")
-                return None
-            if desired_age > self._desired_timeout_s:
-                self._publish_status("stale_input", f"{side} desired age {desired_age:.3f}s")
-                return None
+                if not self._hold_stale_state:
+                    self._publish_status("stale_input", f"{side} state age {state_age:.3f}s")
+                    return None
+                self._publish_status("holding_state", f"{side} state age {state_age:.3f}s; holding last state")
+            if side not in self._latest_desired:
+                if not self._hold_stale_desired:
+                    self._publish_status("waiting", f"missing {side} desired")
+                    return None
+                q_desired = q_current
+                desired_age = 0.0
+                self._publish_status("holding_desired", f"missing {side} desired; holding current")
+            else:
+                q_desired, desired_t = self._latest_desired[side]
+                desired_age = now_mono - desired_t
+                if desired_age > self._desired_timeout_s:
+                    if not self._hold_stale_desired:
+                        self._publish_status("stale_input", f"{side} desired age {desired_age:.3f}s")
+                        return None
+                    q_desired = q_current
+                    self._publish_status("holding_desired", f"{side} desired age {desired_age:.3f}s; holding current")
             arms[side] = {
                 "q_current": q_current.tolist(),
                 "q_desired": q_desired.tolist(),
@@ -192,7 +209,7 @@ class IsaacRmpflowStreamBridge(Node):
             }
         for side, (q_current, state_t) in self._latest_state.items():
             state_age = now_mono - state_t
-            if side in SIDES and state_age <= self._state_timeout_s:
+            if side in SIDES and (state_age <= self._state_timeout_s or self._hold_stale_state):
                 observed_arms[side] = {
                     "q_current": q_current.tolist(),
                     "state_age_s": state_age,

@@ -48,6 +48,11 @@ sphere overlays. It also stores the FACTR real and wrist-offset sim initial
 joint vectors as `factr:initial_q_real` and `factr:initial_q_sim` attributes on
 `/World/left_ur7e` and `/World/right_ur7e`.
 
+The URDF also includes a visual-only `pinch_center` frame at the midpoint of
+the primitive Robotiq pads. RMPFlow still targets `tool0` by default; switch
+`rmpflow/config.json` to `pinch_center` only after visually confirming that the
+marker matches the real gripper TCP/pinch point.
+
 ## Isaac/Lula RMPFlow Stream Server
 
 The streaming server consumes the latest observed/desired joint state stream
@@ -115,6 +120,11 @@ Lula RMPFlow does not use USD alone. It expects:
 The generated primitive URDF is the current kinematic input for Lula. The
 remaining work is validation: confirm axes, limits, wrist offsets, collision
 spheres, base poses, and RMPFlow gains before using RMPFlow on hardware.
+
+For first validation, keep the RMPFlow joint velocity cap aligned with Isaac's
+stock Universal Robots configs (`joint_velocity_cap_rmp.max_velocity: 2.15`).
+Raising it toward the UR7e axis-speed spec changes policy aggressiveness and
+should be treated as a hardware tuning step, not a config cleanup.
 
 The scene metadata stores both the MaxLab mount pose and `world_from_lula_base`.
 Use `world_from_lula_base` for RMPFlow/dynamic-obstacle transforms: it composes

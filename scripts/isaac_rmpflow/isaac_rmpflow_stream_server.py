@@ -260,7 +260,7 @@ def main() -> None:
         help="Override right wrist_3 real-to-Lula offset. Default comes from scene metadata.",
     )
     parser.add_argument("--loop-hz", type=float, default=500.0)
-    parser.add_argument("--stale-input-timeout-s", type=float, default=0.10)
+    parser.add_argument("--stale-input-timeout-s", type=float, default=5.00)
     parser.add_argument("--status-period-s", type=float, default=1.0)
     parser.add_argument("--dynamic-other-arm-obstacles", action="store_true")
     parser.add_argument("--scene-metadata", type=Path, default=DEFAULT_SCENE_METADATA)

@@ -60,7 +60,12 @@ class LulaRmpPolicy:
 
         self._lula = lula
         self._wrist_3_offset = float(wrist_3_offset)
-        self._max_substep_size = float(max_substep_size)
+        config_path = config_dir / "rmpflow/config.json"
+        config = {}
+        if config_path.exists():
+            config = json.loads(config_path.read_text())
+        self._ee_frame = str(config.get("end_effector_frame_name", "tool0"))
+        self._max_substep_size = float(config.get("maximum_substep_size", max_substep_size))
         self._last_q: Dict[str, np.ndarray] = {}
         self._last_t: Dict[str, float] = {}
         self._state_q: Dict[str, np.ndarray] = {}
@@ -74,7 +79,7 @@ class LulaRmpPolicy:
         self._kinematics = self._robot.kinematics()
         self._world = lula.create_world()
         self._world_view = self._world.add_world_view()
-        self._rmp_cfg = lula.create_rmpflow_config(str(cfg), self._robot, "tool0", self._world_view)
+        self._rmp_cfg = lula.create_rmpflow_config(str(cfg), self._robot, self._ee_frame, self._world_view)
         self._rmp = lula.create_rmpflow(self._rmp_cfg)
 
     def add_sphere_obstacle(self, center: Iterable[float], radius: float):
@@ -122,7 +127,7 @@ class LulaRmpPolicy:
         return q_real
 
     def _desired_tool_pose(self, q_desired: np.ndarray):
-        pose = self._kinematics.pose(np.expand_dims(q_desired, 1), "tool0")
+        pose = self._kinematics.pose(np.expand_dims(q_desired, 1), self._ee_frame)
         return pose.translation, pose.rotation.matrix()
 
     def tool_translation(self, q_real: np.ndarray) -> np.ndarray:

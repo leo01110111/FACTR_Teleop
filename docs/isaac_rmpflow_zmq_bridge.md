@@ -156,24 +156,27 @@ the stream-server command so missing left observations fail closed. Omitting
 
 ## ZMQ Pattern
 
-Use the streaming PUB/SUB path for RMPFlow bring-up. Keep ROS-side stale-output
-timeouts short enough that a stuck Isaac process cannot feed stale targets to
-the robot.
+Use the latest-only streaming PUB/SUB path for RMPFlow bring-up. Keep ROS-side
+stale-output timeouts short enough that a stuck Isaac process cannot feed stale
+targets to the robot.
 
-Recommended defaults:
+Recommended streaming defaults:
 
 ```text
-endpoint: tcp://127.0.0.1:5557
-request_hz: 50-100
+input_endpoint: tcp://127.0.0.1:5558
+output_endpoint: tcp://127.0.0.1:5559
+loop_hz: 500
+publish_hz: 500
 state_timeout_s: 0.10
 desired_timeout_s: 0.10
-isaac_response_timeout_s: 0.05
 max_response_age_s: 0.10
 max_joint_step_rad: 0.05
+max_safe_target_distance_rad: 0.05
+safe_target_timeout: 0.10
 ```
 
-Move to latest-only `PUB/SUB` or `DEALER/ROUTER` only after the first
-prototype proves the schema, transforms, and safety behavior.
+The older request/reply bridge was removed; do not use `tcp://127.0.0.1:5557`
+for the current RMPFlow path.
 
 ## Request Schema
 
