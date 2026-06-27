@@ -81,6 +81,9 @@ class IsaacCuMotionStreamBridge(Node):
         self._latest_state: Dict[str, Tuple[np.ndarray, float]] = {}
         self._latest_desired: Dict[str, Tuple[np.ndarray, float]] = {}
 
+        # Inputs to the external RMP process come from the live UR state and the
+        # teleop desired target. The bridge does not command the follower itself;
+        # it only publishes safe_ur_pos for FACTRTeleopUR7e to consume.
         self.create_subscription(JointState, str(self.get_parameter("left_state_topic").value), self._left_state_cb, 10)
         self.create_subscription(
             JointState, str(self.get_parameter("right_state_topic").value), self._right_state_cb, 10
@@ -115,6 +118,8 @@ class IsaacCuMotionStreamBridge(Node):
         self._output_sub.setsockopt(zmq.RCVHWM, 1)
         self._output_sub.setsockopt_string(zmq.SUBSCRIBE, "")
         try:
+            # RMP outputs are latest-state commands, not a history stream. CONFLATE
+            # keeps the newest response only, matching the server-side queue policy.
             self._output_sub.setsockopt(zmq.CONFLATE, 1)
         except Exception:
             pass
@@ -184,11 +189,16 @@ class IsaacCuMotionStreamBridge(Node):
                 if not self._hold_stale_state:
                     self._publish_status("stale_input", f"{side} state age {state_age:.3f}s")
                     return None
+                # During lab bring-up we prefer holding the last measured state to
+                # dropping the whole stream for one late topic tick. The server still
+                # rejects requests whose wall-clock stamp exceeds its stale timeout.
                 self._publish_status("holding_state", f"{side} state age {state_age:.3f}s; holding last state")
             if side not in self._latest_desired:
                 if not self._hold_stale_desired:
                     self._publish_status("waiting", f"missing {side} desired")
                     return None
+                # No desired target yet: ask RMPFlow to hold the current measured
+                # posture instead of inventing a target or publishing nothing.
                 q_desired = q_current
                 desired_age = 0.0
                 self._publish_status("holding_desired", f"missing {side} desired; holding current")
@@ -207,6 +217,8 @@ class IsaacCuMotionStreamBridge(Node):
                 "state_age_s": state_age,
                 "desired_age_s": desired_age,
             }
+        # Observed arms includes non-active sides too. Dynamic obstacle mode uses
+        # this to let each active RMP policy see the opposite arm as moving spheres.
         for side, (q_current, state_t) in self._latest_state.items():
             state_age = now_mono - state_t
             if side in SIDES and (state_age <= self._state_timeout_s or self._hold_stale_state):
@@ -230,6 +242,9 @@ class IsaacCuMotionStreamBridge(Node):
         sent_request = False
         if request is not None:
             try:
+                # The Isaac process drains to latest input, so every bridge tick
+                # publishes a full snapshot: current q, desired q, observed arms,
+                # and limits. There is no incremental state in the wire protocol.
                 self._input_pub.send_json(request, flags=zmq.NOBLOCK)
                 self._last_sent_sequence = int(request["sequence"])
                 sent_request = True
@@ -257,9 +272,12 @@ class IsaacCuMotionStreamBridge(Node):
         for side, q_safe in safe_targets.items():
             if side in self._latest_desired:
                 q_desired = self._latest_desired[side][0]
+                # Diagnostic error between the operator's desired target and the
+                # RMP-filtered target. This stays useful even when safe publishing
+                # is disabled for monitor-only validation.
                 self._safe_error_pub[side].publish(_float_msg(float(np.linalg.norm(q_safe - q_desired))))
         if not self._publish_safe_targets:
-            self._publish_status("shadow", f"{mode}: {reason}")
+            self._publish_status("monitor_only", f"{mode}: {reason}")
             return
 
         for side, q_safe in safe_targets.items():
@@ -268,6 +286,8 @@ class IsaacCuMotionStreamBridge(Node):
 
     def _drain_latest_response(self) -> dict | None:
         latest = None
+        # Drain all queued responses and keep the newest one. Safe targets are only
+        # valid relative to recent state, so old responses must not be replayed.
         while True:
             try:
                 latest = self._output_sub.recv_json(flags=zmq.NOBLOCK)
@@ -293,6 +313,9 @@ class IsaacCuMotionStreamBridge(Node):
         if not bool(response.get("ok", False)):
             raise ValueError(str(response.get("reason", "Isaac response ok=false")))
         policy = str(response.get("policy", ""))
+        # When this bridge is allowed to publish safe_ur_pos, require the real RMP
+        # policy by default. pass_through is only for transport bring-up and should
+        # not be mistaken for collision-aware filtering.
         if self._publish_safe_targets and self._require_rmp_policy and policy != "rmp":
             raise ValueError(f"refusing response policy {policy or '<missing>'}; expected rmp")
         response_age = time.time() - float(response.get("stamp", 0.0))
@@ -313,6 +336,10 @@ class IsaacCuMotionStreamBridge(Node):
             if side in self._latest_state:
                 q_current = self._latest_state[side][0]
                 max_distance = min(self._max_safe_target_distance_rad, self._max_joint_step_rad)
+                # SAFETY: the external process may be correct but late, miswired,
+                # or configured with a larger step than this follower should accept.
+                # Clamp acceptance here too so a bad q_safe cannot create a servoJ
+                # jump in FACTRTeleopUR7e.
                 if np.max(np.abs(q_safe - q_current)) > max_distance:
                     raise ValueError(f"{side} q_safe too far from current state")
             input_age = float(arms[side].get("input_age_s", 0.0))

@@ -1,3 +1,10 @@
+"""Launch the ROS side of the Isaac Sim 6 cuMotion RMPFlow stream.
+
+The cuMotion server runs separately in the Isaac environment. This launch file
+only starts the bridge that turns FACTR UR state/desired topics into ZMQ
+requests and publishes validated safe_ur_pos targets back to FACTR.
+"""
+
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
@@ -59,7 +66,7 @@ def generate_launch_description():
     publish_safe_targets_arg = DeclareLaunchArgument(
         "publish_safe_targets",
         default_value="false",
-        description="If false, run shadow mode and do not publish safe_ur_pos.",
+        description="If false, validate stream responses without publishing safe_ur_pos.",
     )
     require_rmp_policy_arg = DeclareLaunchArgument(
         "require_rmp_policy",

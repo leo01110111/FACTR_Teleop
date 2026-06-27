@@ -13,28 +13,9 @@ The current backend uses:
 - `configs/isaac_cumotion/maxlab_ur7e_scene.yaml`
 
 It has passed headless synthetic request/response smoke testing, but the XRDF
-collision spheres, base transforms, wrist offsets, and gains still need visual
-and hardware validation before treating bimanual collision avoidance as trusted.
-
-## Viewer
-
-Run this before robot deployment to inspect the configured table, UR bases, and
-XRDF collision spheres in Isaac Sim 6:
-
-```bash
-cd /home/srianumakonda/FACTR_Teleop
-
-bash scripts/isaac_cumotion/run_cumotion_viewer.sh
-```
-
-For a headless USD export:
-
-```bash
-bash scripts/isaac_cumotion/run_cumotion_viewer.sh \
-  --headless \
-  --duration-s 0.1 \
-  --output-usd /tmp/maxlab_cumotion_scene.usd
-```
+collision spheres, base transforms, wrist offsets, and gains still need Isaac
+Sim and hardware validation before treating bimanual collision avoidance as
+trusted.
 
 ## Stream Server
 
@@ -75,29 +56,8 @@ ros2 launch launch/isaac_cumotion_stream_bridge.py \
 Terminals 3 and 4 are the normal FACTR UR7e teleop nodes with
 `collision_safety:=true`.
 
-## Diagnostics
-
-Bridge diagnostics are published under:
-
-```text
-/factr_teleop/isaac_cumotion_stream/status
-/factr_teleop/isaac_cumotion_stream/reason
-/factr_teleop/isaac_cumotion_stream/controller_hz
-/factr_teleop/isaac_cumotion_stream/input_age_ms
-```
-
-Collect a summary with:
-
-```bash
-python scripts/isaac_cumotion/collect_stream_shadow_diagnostics.py \
-  --active-sides left,right \
-  --duration-s 30 \
-  --output-json /tmp/isaac_cumotion_shadow_bimanual.json
-```
-
 ## Notes
 
 - The ROS bridge is backend-specific now: use `launch/isaac_cumotion_stream_bridge.py`.
 - `pyzmq` must be installed in `env_isaaclab6`.
 - The stream server is headless Python and does not instantiate `SimulationApp`.
-- Use `scripts/isaac_cumotion/run_cumotion_viewer.sh` for visual inspection.

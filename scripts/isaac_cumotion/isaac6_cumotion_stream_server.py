@@ -123,6 +123,9 @@ class PassThroughPolicy:
         dt_override: float | None = None,
     ) -> tuple[np.ndarray, str, str]:
         del side, dt_override
+        # Non-RMP bring-up mode: still enforce the same per-tick joint step cap
+        # as the real policy so the ROS bridge can validate the transport path
+        # without letting a stale or large desired target become a jump command.
         q_safe = _clip_step(q_current, q_desired, max_step)
         mode = "pass_through" if np.allclose(q_safe, q_desired, atol=1e-9, rtol=0.0) else "filtered"
         reason = "pass_through" if mode == "pass_through" else "step_clipped"
@@ -149,6 +152,9 @@ class CuMotionRmpPolicy:
         self._rmp_by_side = {}
         self._obstacle_handles = []
 
+        # cuMotion owns the actual RMPFlow implementation. This server only
+        # loads the FACTR-specific URDF/XRDF/RMP config and streams latest joint
+        # targets through that backend.
         xrdf_text = (config_dir / "robot.xrdf").read_text(encoding="utf-8")
         urdf_text = (config_dir / "robot.urdf").read_text(encoding="utf-8")
         self._robot = cumotion.load_robot_from_memory(xrdf_text, urdf_text)
@@ -189,11 +195,16 @@ class CuMotionRmpPolicy:
         self._world_view.update()
 
     def _real_to_cumotion(self, q: np.ndarray) -> np.ndarray:
+        # FACTR/UR reports wrist_3 in the real robot branch. The cuMotion model
+        # uses the Isaac backend branch, so joint 6 needs a fixed scene-defined
+        # offset before any kinematics or RMP evaluation.
         q_backend = np.asarray(q, dtype=np.float64).copy()
         q_backend[5] += self._wrist_3_offset
         return q_backend
 
     def _cumotion_to_real(self, q: np.ndarray) -> np.ndarray:
+        # Convert the cuMotion result back to the real UR branch before handing
+        # q_safe to ROS. The follower servoJ path expects real robot joint angles.
         q_real = np.asarray(q, dtype=np.float64).copy()
         q_real[5] -= self._wrist_3_offset
         return q_real
@@ -219,6 +230,9 @@ class CuMotionRmpPolicy:
         q_cur = self._real_to_cumotion(q_current)
         q_des = self._real_to_cumotion(q_desired)
         last_t = self._last_t.get(side)
+        # Use the bridge's controller period when available. When running from a
+        # synthetic caller, clamp wall-clock dt so a pause or debugger stop does
+        # not make the RMP integrator take a giant step.
         if dt_override is None:
             dt = 1.0 / 100.0 if last_t is None else float(np.clip(now - last_t, 1.0 / 250.0, 1.0 / 20.0))
         else:
@@ -231,10 +245,16 @@ class CuMotionRmpPolicy:
 
         q_state = self._state_q.get(side)
         qd_state = self._state_qd.get(side)
+        # The RMP state is an internal integration state, not a source of truth.
+        # If ROS says the robot is far from it (restart, dropped packets, manual
+        # jog), snap the policy state back to the measured arm before filtering.
         if q_state is None or qd_state is None or np.linalg.norm(q_state - q_cur, ord=np.inf) > 0.75:
             q_state = q_cur.copy()
             qd_state = measured_qd.copy()
 
+        # Attract both c-space and tool pose to the desired joint target. The
+        # c-space term preserves the operator's requested posture; the tool
+        # attractors give RMPFlow a task-space objective for obstacle avoidance.
         target_pos, target_rot = self._desired_tool_pose(q_des)
         rmp = self._rmp_for_side(side)
         rmp.set_cspace_attractor(q_des)
@@ -246,6 +266,9 @@ class CuMotionRmpPolicy:
         qd_next = qd_state.copy()
         substeps = max(1, int(math.ceil(dt / self._maximum_substep_size)))
         h = dt / substeps
+        # Integrate acceleration explicitly in small substeps. cuMotion evaluates
+        # qdd; FACTR publishes a clipped position target, so this local state is
+        # only the policy filter between latest desired q and the next safe q.
         for _ in range(substeps):
             qdd = np.zeros(6, dtype=np.float64)
             rmp.eval_accel(q_next, qd_next, qdd)
@@ -280,6 +303,8 @@ class OtherArmObstacleField:
         self._world_from_controlled_R, self._world_from_controlled_t = self._base_transform(bases[controlled_side])
         self._world_from_obstacle_R, self._world_from_obstacle_t = self._base_transform(bases[obstacle_side])
         self._sphere_specs = _load_collision_spheres(xrdf_path)
+        # Seed obstacles at the configured match pose so RMPFlow starts with a
+        # valid world view even before the other arm's first observed state arrives.
         initial_q = np.asarray(scene["factr_initial_match_joint_pos_real"][obstacle_side], dtype=np.float64)
         centers = self._compute_centers(initial_q, keep_valid=True)
         self._handles = [policy.add_sphere_obstacle(center, radius) for center, (_, _, radius) in zip(centers, self._sphere_specs)]
@@ -318,6 +343,9 @@ class OtherArmObstacleField:
                 raise
             center_obstacle = np.asarray(pose.rotation.matrix(), dtype=np.float64) @ center_link
             center_obstacle = center_obstacle + np.asarray(pose.translation, dtype=np.float64)
+            # Collision spheres are authored in the obstacle arm's backend base.
+            # RMPFlow for the controlled arm expects obstacle coordinates in the
+            # controlled backend base, so transform obstacle -> world -> controlled.
             center_world = self._world_from_obstacle_R @ center_obstacle + self._world_from_obstacle_t
             center_controlled = self._world_from_controlled_R.T @ (center_world - self._world_from_controlled_t)
             centers.append(center_controlled)
@@ -353,6 +381,10 @@ class CuMotionRmpPolicySet:
         self._dynamic_fields = {}
         self._obstacle_count = 0
         if dynamic_other_arm_obstacles:
+            # Each active policy gets the opposite arm as a moving sphere field.
+            # This is intentionally one-way per policy: the left RMP sees right
+            # spheres in the left base frame, and the right RMP sees left spheres
+            # in the right base frame.
             for side, policy in self._policies.items():
                 obstacle_side = _opposite_side(side)
                 field = OtherArmObstacleField(
@@ -405,6 +437,9 @@ def _error_response(sequence: int, reason: str, *, policy: str = "unknown") -> d
 def _drain_latest(socket) -> tuple[dict | None, int]:
     latest = None
     count = 0
+    # The bridge publishes faster than the policy needs history. Drain the queue
+    # and keep only the newest sample so old desired targets cannot accumulate
+    # latency and later command the robot.
     while True:
         try:
             latest = socket.recv_json(flags=zmq.NOBLOCK)
@@ -435,6 +470,8 @@ def _validate_request(request: dict) -> tuple[int, tuple[str, ...], dict, float]
 def _compute_response(policy, request: dict, *, controller_dt: float, stale_after_s: float, require_other_arm_state: bool, policy_name: str) -> dict:
     sequence, active_sides, arms, max_step = _validate_request(request)
     request_age = time.time() - float(request.get("stamp", time.time()))
+    # Refuse old bridge input. A valid RMP output computed from stale state is
+    # still unsafe because the follower may have moved since the request stamp.
     if request_age > stale_after_s:
         return _error_response(sequence, f"input age {request_age:.3f}s", policy=policy_name)
     if hasattr(policy, "update_dynamic_obstacles"):
@@ -509,6 +546,8 @@ def main() -> None:
     input_socket.bind(args.input_endpoint)
     output_socket = context.socket(zmq.PUB)
     output_socket.setsockopt(zmq.LINGER, 0)
+    # Keep only the latest safe target. If ROS cannot receive fast enough, it is
+    # better to drop old outputs than to queue delayed q_safe commands.
     output_socket.setsockopt(zmq.SNDHWM, 1)
     output_socket.bind(args.output_endpoint)
 
