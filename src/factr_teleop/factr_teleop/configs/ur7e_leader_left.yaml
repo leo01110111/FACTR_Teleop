@@ -18,6 +18,10 @@ arm_teleop:
   leader_urdf: "factr_teleop_ur5_gello.urdf"
   #For the follower arm (UR servoJ params, read from arm_teleop.servo)
   servo:
+    fast_servo_thread: true
+    command_hz: 500.0
+    observation_thread: true
+    observation_hz: 500.0
     lookahead_time: 0.05
     gain: 500.0
     watchdog_min_frequency: 20.0

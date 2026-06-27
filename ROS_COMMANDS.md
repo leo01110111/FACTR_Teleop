@@ -102,6 +102,112 @@ and communicates with ROS through ZMQ. The ROS bridge publishes the same
 Use `configs/isaac_cumotion/README.md` for the full cuMotion server, ROS bridge,
 teleop, and diagnostic commands.
 
+## Left UR7e RMP Test At 500 Hz
+
+Run these in four separate terminals. Use this when testing the left follower
+against the right arm as a static dynamic obstacle.
+
+Terminal 1: publish the right UR state as the obstacle at 500 Hz.
+
+```bash
+cd /home/srianumakonda/FACTR_Teleop
+source ./factr_conda_env
+source install/setup.bash
+
+python - <<'PY'
+import rclpy
+from rclpy.node import Node
+from sensor_msgs.msg import JointState
+from rtde_receive import RTDEReceiveInterface
+
+class StaticRightURState(Node):
+    def __init__(self):
+        super().__init__("right_ur_static_state_500hz")
+        rtde_r = RTDEReceiveInterface("192.168.2.2")
+        self.q = list(rtde_r.getActualQ())[:6]
+        rtde_r.disconnect()
+        self.pub = self.create_publisher(JointState, "/ur/right/obs_ur_state", 10)
+        self.create_timer(1.0 / 500.0, self.tick)
+
+    def tick(self):
+        msg = JointState()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.position = self.q
+        self.pub.publish(msg)
+
+rclpy.init()
+node = StaticRightURState()
+try:
+    rclpy.spin(node)
+finally:
+    node.destroy_node()
+    rclpy.shutdown()
+PY
+```
+
+Terminal 2: run the cuMotion/RMP server.
+
+```bash
+cd /home/srianumakonda/FACTR_Teleop
+
+bash scripts/isaac_cumotion/run_cumotion_stream_server.sh \
+  --mode rmp \
+  --loop-hz 500.0 \
+  --stale-input-timeout-s 0.5 \
+  --policy-sides left \
+  --dynamic-other-arm-obstacles \
+  --require-other-arm-state
+```
+
+Terminal 3: run the ROS bridge.
+
+```bash
+cd /home/srianumakonda/FACTR_Teleop
+source ./factr_conda_env
+source install/setup.bash
+
+ros2 run factr_teleop isaac_cumotion_stream_bridge --ros-args \
+  -p active_sides:=left \
+  -p publish_hz:=500.0 \
+  -p publish_safe_targets:=true \
+  -p safe_response_timeout_s:=0.25 \
+  -p state_timeout_s:=0.20 \
+  -p desired_timeout_s:=0.20 \
+  -p max_joint_step_rad:=0.08 \
+  -p max_safe_target_distance_rad:=0.08 \
+  -p max_sequence_lag:=5 \
+  -p hold_stale_state:=true \
+  -p hold_stale_desired:=true
+```
+
+Terminal 4: run left teleop with collision safety.
+
+```bash
+cd /home/srianumakonda/FACTR_Teleop
+source ./factr_conda_env
+source install/setup.bash
+
+ros2 run factr_teleop factr_teleop_ur7e --ros-args \
+  -r __node:=factr_teleop_ur7e_left \
+  -p config_file:=ur7e_leader_left.yaml \
+  -p collision_safety:=true \
+  -p safe_target_timeout:=0.25
+```
+
+Diagnostic terminal: check the actual rates.
+
+```bash
+cd /home/srianumakonda/FACTR_Teleop
+source ./factr_conda_env
+source install/setup.bash
+
+timeout 10 ros2 topic echo /factr_teleop/left/servo_hz
+timeout 10 ros2 topic echo /factr_teleop/left/observation_hz
+timeout 10 ros2 topic echo /factr_teleop/left/leader_hz
+timeout 10 ros2 topic echo /factr_teleop/isaac_cumotion_stream/controller_hz
+timeout 10 ros2 topic hz /factr_teleop/left/safe_ur_pos
+```
+
 ## Return UR To Initial Match Pose
 
 Right:

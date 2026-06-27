@@ -26,6 +26,7 @@ import pinocchio as pin
 from abc import ABC, abstractmethod
 
 from rclpy.node import Node
+from std_msgs.msg import Float32
 from python_utils.utils import get_workspace_root
 from factr_teleop.dynamixel.driver import DynamixelDriver
 
@@ -77,6 +78,9 @@ class FACTRTeleop(Node, ABC):
         
         self.name = self.config["name"]
         self.dt = 1 / self.config["controller"]["frequency"]
+        self._leader_loop_count_since_status = 0
+        self._leader_loop_last_status_t = time.monotonic()
+        self.leader_hz_pub = self.create_publisher(Float32, f"/factr_teleop/{self.name}/leader_hz", 10)
         
         self._prepare_dynamixel()
         self._prepare_inverse_dynamics()
@@ -144,8 +148,13 @@ class FACTRTeleop(Node, ABC):
         self._get_dynamixel_offsets()
         # ensure the leader and the follower arms have the same joint positions before starting
         self._match_start_pos()
+        self._post_match_start()
         # start the control loop
         self.timer = self.create_timer(self.dt, self.control_loop_callback)
+
+    def _post_match_start(self):
+        """Optional subclass hook after leader/follower matching, before the timer starts."""
+        pass
 
 
     def _prepare_dynamixel(self):
@@ -506,7 +515,8 @@ class FACTRTeleop(Node, ABC):
             leader_arm_pos, leader_arm_vel, leader_gripper_pos, leader_gripper_vel
         )
         torque_arm += torque_l
-        torque_arm += self.null_space_regulation(leader_arm_pos, leader_arm_vel)
+        if self.null_space_kp != 0.0 or self.null_space_kd != 0.0:
+            torque_arm += self.null_space_regulation(leader_arm_pos, leader_arm_vel)
 
         if self.enable_gravity_comp:
             torque_arm += self.gravity_compensation(leader_arm_pos, leader_arm_vel)
@@ -522,6 +532,19 @@ class FACTRTeleop(Node, ABC):
 
         self.set_leader_joint_torque(torque_arm, torque_gripper)
         self.update_communication(leader_arm_pos, leader_gripper_pos)
+        self._publish_leader_loop_hz()
+
+    def _publish_leader_loop_hz(self):
+        self._leader_loop_count_since_status += 1
+        now_mono = time.monotonic()
+        status_dt = now_mono - self._leader_loop_last_status_t
+        if status_dt < 1.0:
+            return
+        msg = Float32()
+        msg.data = float(self._leader_loop_count_since_status / status_dt)
+        self.leader_hz_pub.publish(msg)
+        self._leader_loop_count_since_status = 0
+        self._leader_loop_last_status_t = now_mono
 
 
     @abstractmethod

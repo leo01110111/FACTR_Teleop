@@ -9,6 +9,7 @@ import pinocchio as pin
 
 import rclpy
 from sensor_msgs.msg import JointState
+from std_msgs.msg import Float32
 
 from rtde_control import RTDEControlInterface
 from rtde_receive import RTDEReceiveInterface
@@ -91,6 +92,10 @@ class FACTRTeleopUR7e(FACTRTeleop):
     """
 
     def __init__(self):
+        self.gripper_feedback_magnitude = 0.2
+        self.gripper_torque_ema_beta = 0.9
+        self.gripper_current_limit_ma = 250.0
+        self._last_servo_t = None
         super().__init__()
         # Only needed if force-feedback to the leader gripper is enabled. Use
         # .get() so the demo/teleop configs that disable it need not carry gains.
@@ -103,9 +108,6 @@ class FACTRTeleopUR7e(FACTRTeleop):
         # that overloads the motor since the trigger must push continuously against
         # the operator's finger. Capped on the FACTR side (see gripper_feedback).
         self.gripper_current_limit_ma = gf.get("current_limit_ma", 250.0)
-        # Timestamp of the previous servoJ call, used to measure the real control
-        # period for servoJ's `time` argument (see update_communication).
-        self._last_servo_t = None
         self._ensure_collision_safety_state()
 
     def _ensure_collision_safety_state(self):
@@ -150,6 +152,26 @@ class FACTRTeleopUR7e(FACTRTeleop):
             #gain decides how stiffly the arm follows the plan created.
         self.servo_lookahead_time = servo_cfg.get("lookahead_time", 0.1)
         self.servo_gain = servo_cfg.get("gain", 300.0)
+        self.servo_command_hz = float(servo_cfg.get("command_hz", frequency))
+        self.observation_hz = float(servo_cfg.get("observation_hz", self.servo_command_hz))
+        self.enable_fast_servo_thread = self.enable_collision_safety and bool(
+            servo_cfg.get("fast_servo_thread", True)
+        )
+        self.enable_observation_thread = bool(servo_cfg.get("observation_thread", True))
+        self._servo_lock = threading.Lock()
+        self._servo_thread_running = False
+        self._servo_thread = None
+        self._servo_last_cmd_q = None
+        self._servo_last_cmd_t = 0.0
+        self._servo_count_since_status = 0
+        self._servo_last_status_t = time.monotonic()
+        self._latest_ur_q = None
+        self._latest_tcp_wrench = np.zeros(6, dtype=np.float64)
+        self._obs_lock = threading.Lock()
+        self._obs_thread_running = False
+        self._obs_thread = None
+        self._obs_count_since_status = 0
+        self._obs_last_status_t = time.monotonic()
 
         #Promise that we'll send commands at this freq. If not, kill control.
         self.watchdog_min_frequency = servo_cfg.get("watchdog_min_frequency", 20.0)
@@ -217,6 +239,8 @@ class FACTRTeleopUR7e(FACTRTeleop):
         self.desired_ur_pos_pub = self.create_publisher(JointState, f'/factr_teleop/{self.name}/desired_ur_pos', 10)
         self.cmd_ur_pos_pub = self.create_publisher(JointState, f'/factr_teleop/{self.name}/cmd_ur_pos', 10)
         self.cmd_gripper_pos_pub = self.create_publisher(JointState, f'/factr_teleop/{self.name}/cmd_gripper_pos', 10)
+        self.servo_hz_pub = self.create_publisher(Float32, f'/factr_teleop/{self.name}/servo_hz', 10)
+        self.observation_hz_pub = self.create_publisher(Float32, f'/factr_teleop/{self.name}/observation_hz', 10)
         # Raw TCP wrench is logged unconditionally as an observation (cheap
         # streamed read) -- force data must not depend on whether haptic feedback
         # happens to be enabled.
@@ -266,6 +290,141 @@ class FACTRTeleopUR7e(FACTRTeleop):
                 )
                 self.gripper = None
 
+    def _post_match_start(self):
+        q_hold, wrench_hold = self._read_robot_observation()
+        with self._servo_lock:
+            self._latest_ur_q = q_hold.copy()
+            self._servo_last_cmd_q = q_hold.copy()
+            self._servo_last_cmd_t = time.monotonic()
+        with self._obs_lock:
+            self._latest_tcp_wrench = wrench_hold.copy()
+
+        if self.enable_observation_thread:
+            self._obs_thread_running = True
+            self._obs_thread = threading.Thread(target=self._observation_loop, daemon=True)
+            self._obs_thread.start()
+            self.get_logger().info(
+                f"FACTR UR7e {self.name}: RTDE observation thread running at "
+                f"{self.observation_hz:.1f} Hz."
+            )
+
+        if not self.enable_fast_servo_thread:
+            return
+
+        self._servo_thread_running = True
+        self._servo_thread = threading.Thread(target=self._servo_loop, daemon=True)
+        self._servo_thread.start()
+        self.get_logger().info(
+            f"FACTR UR7e {self.name}: fast servoJ thread running at "
+            f"{self.servo_command_hz:.1f} Hz."
+        )
+
+    def _servo_loop(self):
+        period = 1.0 / max(self.servo_command_hz, 1.0)
+        next_tick = time.perf_counter()
+        while self._servo_thread_running:
+            now_mono = time.monotonic()
+            with self._servo_lock:
+                safe_fresh = (
+                    self._latest_safe_ur_pos is not None
+                    and now_mono - self._latest_safe_ur_pos_t <= self.safe_target_timeout
+                )
+                if safe_fresh:
+                    target_q = self._latest_safe_ur_pos.copy()
+                elif self._latest_ur_q is not None:
+                    target_q = self._latest_ur_q.copy()
+                elif self._servo_last_cmd_q is not None:
+                    target_q = self._servo_last_cmd_q.copy()
+                else:
+                    target_q = None
+
+            if target_q is not None:
+                try:
+                    self.rtde_c.servoJ(
+                        list(map(float, target_q)),
+                        0.0,
+                        0.0,
+                        period,
+                        self.servo_lookahead_time,
+                        self.servo_gain,
+                    )
+                    with self._servo_lock:
+                        self._servo_last_cmd_q = target_q.copy()
+                        self._servo_last_cmd_t = time.monotonic()
+                        self._servo_count_since_status += 1
+                        status_dt = self._servo_last_cmd_t - self._servo_last_status_t
+                        if status_dt >= 1.0:
+                            msg = Float32()
+                            msg.data = float(self._servo_count_since_status / status_dt)
+                            self.servo_hz_pub.publish(msg)
+                            self._servo_count_since_status = 0
+                            self._servo_last_status_t = self._servo_last_cmd_t
+                except Exception as exc:
+                    if self._servo_thread_running:
+                        self.get_logger().warn(f"fast servoJ thread error: {exc}")
+                    time.sleep(period)
+
+            next_tick += period
+            sleep_s = next_tick - time.perf_counter()
+            if sleep_s > 0.0:
+                time.sleep(sleep_s)
+            else:
+                next_tick = time.perf_counter()
+
+    def _read_robot_observation(self):
+        q = np.array(self.rtde_r.getActualQ(), dtype=np.float64)[:self.num_arm_joints]
+        wrench = -np.array(self.rtde_r.getActualTCPForce(), dtype=np.float64)
+        return q, wrench
+
+    def _cache_robot_observation(self, q, wrench):
+        q = np.asarray(q, dtype=np.float64)[:self.num_arm_joints]
+        wrench = np.asarray(wrench, dtype=np.float64)
+        with self._servo_lock:
+            self._latest_ur_q = q.copy()
+        with self._obs_lock:
+            self._latest_tcp_wrench = wrench.copy()
+
+    def _get_cached_robot_observation(self):
+        with self._servo_lock:
+            q = None if self._latest_ur_q is None else self._latest_ur_q.copy()
+        with self._obs_lock:
+            wrench = self._latest_tcp_wrench.copy()
+        return q, wrench
+
+    def _publish_observation_hz(self):
+        self._obs_count_since_status += 1
+        now_mono = time.monotonic()
+        status_dt = now_mono - self._obs_last_status_t
+        if status_dt < 1.0:
+            return
+        msg = Float32()
+        msg.data = float(self._obs_count_since_status / status_dt)
+        self.observation_hz_pub.publish(msg)
+        self._obs_count_since_status = 0
+        self._obs_last_status_t = now_mono
+
+    def _observation_loop(self):
+        period = 1.0 / max(self.observation_hz, 1.0)
+        next_tick = time.perf_counter()
+        while self._obs_thread_running:
+            try:
+                q, wrench = self._read_robot_observation()
+                self._cache_robot_observation(q, wrench)
+                self.obs_ur_state_pub.publish(create_array_msg(q))
+                self.obs_ur_wrench_pub.publish(create_array_msg(wrench.tolist()))
+                self._publish_observation_hz()
+            except Exception as exc:
+                if self._obs_thread_running:
+                    self.get_logger().warn(f"RTDE observation thread error: {exc}")
+                time.sleep(period)
+
+            next_tick += period
+            sleep_s = next_tick - time.perf_counter()
+            if sleep_s > 0.0:
+                time.sleep(sleep_s)
+            else:
+                next_tick = time.perf_counter()
+
     def _gripper_io_loop(self):
         """
         The Robotiq URCap socket is slow (~ms per command), so all gripper I/O
@@ -296,10 +455,11 @@ class FACTRTeleopUR7e(FACTRTeleop):
                 f"expected {self.num_arm_joints}."
             )
             return
-        self._latest_safe_ur_pos = np.asarray(
-            msg.position[:self.num_arm_joints], dtype=np.float64
-        )
-        self._latest_safe_ur_pos_t = time.monotonic()
+        with self._servo_lock:
+            self._latest_safe_ur_pos = np.asarray(
+                msg.position[:self.num_arm_joints], dtype=np.float64
+            )
+            self._latest_safe_ur_pos_t = time.monotonic()
 
     # ----------------------------------------------------------- force feedback
     def get_leader_arm_external_joint_torque(self):
@@ -318,15 +478,15 @@ class FACTRTeleopUR7e(FACTRTeleop):
         frame wrench [force; torque] from getActualTCPForce(). q is the follower's
         actual configuration -- the pose at which the wrench was measured.
         """
-        q = np.array(self.rtde_r.getActualQ())
-        wrench = np.array(self.rtde_r.getActualTCPForce())          # (6,) base frame [F; T]
-        # Negate the wrench for haptic feedback. With the raw sign, J^T @ wrench
+        q, wrench = self._get_cached_robot_observation()
+        if q is None:
+            q, wrench = self._read_robot_observation()
+            self._cache_robot_observation(q, wrench)
+        # The cached wrench is already negated for haptic feedback. With the raw
+        # sign, J^T @ wrench
         # drives the leader in the same direction as an external push on the
         # follower (assistive -- the arm "runs away" toward the pusher). Haptic
-        # feedback must *oppose* the push so the operator feels resistance, so
-        # flip the sign here. (The wrench observation in update_communication is
-        # negated to match this same sign convention.)
-        wrench = -wrench
+        # feedback must *oppose* the push so the operator feels resistance.
         J = pin.computeFrameJacobian(
             self.pin_model, self.pin_data, q,
             self.ee_frame_id, pin.ReferenceFrame.LOCAL_WORLD_ALIGNED,
@@ -384,22 +544,32 @@ class FACTRTeleopUR7e(FACTRTeleop):
         self._last_servo_t = now
         servo_dt = float(np.clip(servo_dt, 0.002, 0.05))
         # v and a are ignored by servoJ; time/lookahead/gain shape the tracking.
+        current_q, obs_wrench = self._get_cached_robot_observation()
+        if current_q is None:
+            current_q, obs_wrench = self._read_robot_observation()
+            self._cache_robot_observation(current_q, obs_wrench)
+
         if self.enable_collision_safety:
             desired_q = np.array(leader_arm_pos, dtype=np.float64)
             self.desired_ur_pos_pub.publish(create_array_msg(desired_q))
-            current_q = np.array(self.rtde_r.getActualQ())[:self.num_arm_joints]
-            safe_fresh = (
-                self._latest_safe_ur_pos is not None
-                and time.monotonic() - self._latest_safe_ur_pos_t <= self.safe_target_timeout
-            )
-            target_q = self._latest_safe_ur_pos.copy() if safe_fresh else current_q
+            with self._servo_lock:
+                self._latest_ur_q = current_q.copy()
+                safe_fresh = (
+                    self._latest_safe_ur_pos is not None
+                    and time.monotonic() - self._latest_safe_ur_pos_t <= self.safe_target_timeout
+                )
+                target_q = self._latest_safe_ur_pos.copy() if safe_fresh else current_q
+                logged_cmd_q = self._servo_last_cmd_q.copy() if self._servo_last_cmd_q is not None else target_q
         else:
             target_q = leader_arm_pos
+            logged_cmd_q = target_q
 
-        self.rtde_c.servoJ(
-            list(map(float, target_q)),
-            0.0, 0.0, servo_dt, self.servo_lookahead_time, self.servo_gain,
-        )
+        if not self.enable_fast_servo_thread:
+            self.rtde_c.servoJ(
+                list(map(float, target_q)),
+                0.0, 0.0, servo_dt, self.servo_lookahead_time, self.servo_gain,
+            )
+            logged_cmd_q = target_q
 
         # Map the leader trigger angle to the Robotiq command space (0..255).
         norm = float(np.clip(leader_gripper_pos / self.gripper_limit_max, 0.0, 1.0))
@@ -413,17 +583,11 @@ class FACTRTeleopUR7e(FACTRTeleop):
         # ROS logging for data collection. The gripper action is logged in
         # follower (Robotiq, 0..255) units -- the space the policy commands at
         # deployment -- not the leader's trigger angle.
-        self.cmd_ur_pos_pub.publish(create_array_msg(target_q))
+        self.cmd_ur_pos_pub.publish(create_array_msg(logged_cmd_q))
         self.cmd_gripper_pos_pub.publish(create_array_msg([gripper_cmd_255]))
-        self.obs_ur_state_pub.publish(create_array_msg(self.rtde_r.getActualQ()))
-        # TCP wrench (base frame [Fx,Fy,Fz,Tx,Ty,Tz]) as an always-on force
-        # observation -- cheap streamed read, no Jacobian, no dependence on the
-        # feedback flag. This is the force signal to train policies on. Negated to
-        # match the haptic sign convention (see get_leader_arm_external_joint_torque):
-        # the published wrench is the external force acting *on* the follower, so a
-        # push registers in the direction of the push.
-        obs_wrench = -np.array(self.rtde_r.getActualTCPForce())
-        self.obs_ur_wrench_pub.publish(create_array_msg(obs_wrench.tolist()))
+        if not self.enable_observation_thread:
+            self.obs_ur_state_pub.publish(create_array_msg(current_q))
+            self.obs_ur_wrench_pub.publish(create_array_msg(obs_wrench.tolist()))
         # Follower gripper [position, current] in raw Robotiq 0..255 units, cached
         # by the gripper thread (values stay at 0 if no gripper is connected).
         self.obs_gripper_pub.publish(create_array_msg(
@@ -432,6 +596,12 @@ class FACTRTeleopUR7e(FACTRTeleop):
 
     # ------------------------------------------------------------------ cleanup
     def shut_down(self):
+        self._servo_thread_running = False
+        if getattr(self, "_servo_thread", None) is not None:
+            self._servo_thread.join(timeout=1.0)
+        self._obs_thread_running = False
+        if getattr(self, "_obs_thread", None) is not None:
+            self._obs_thread.join(timeout=1.0)
         # Stop the gripper thread first so it stops touching the socket.
         self._gripper_thread_running = False
         if getattr(self, "_gripper_thread", None) is not None:

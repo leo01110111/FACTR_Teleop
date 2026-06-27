@@ -48,7 +48,7 @@ rmp_params:
         damping_gain: 300.
         metric_weight: 100.
     target_rmp:
-        accel_p_gain: 80.
+        accel_p_gain: 150. # NOTE: tuned from 80
         accel_d_gain: 120.
         accel_norm_eps: .075
         metric_alpha_length_scale: .05
@@ -66,14 +66,14 @@ rmp_params:
         proximity_metric_boost_length_scale: .05
         accept_user_weights: false
     collision_rmp:
-        damping_gain: 100. # NOTE: tuned from 50
+        damping_gain: 50.
         damping_std_dev: .04
         damping_robustness_eps: 1e-2
         damping_velocity_gate_length_scale: .01
         repulsion_gain: 1000. # NOTE: tuned from 1000
         repulsion_std_dev: .01
-        metric_modulation_radius: .15 #NOTE: tuned from 0.5
-        metric_scalar: 500.
+        metric_modulation_radius: .06 # NOTE: 0.10 still felt too slow near other-arm EE
+        metric_scalar: 100. # NOTE: tuned from 500
         metric_exploder_std_dev: .02
         metric_exploder_eps: .001
     damping_rmp:
