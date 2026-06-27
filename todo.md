@@ -18,3 +18,7 @@ priority: figure out root cause of issue with motor 2, i think we need to defini
 - [x] Revert the norm change of the joint position deltas before follower movement so that we can ensure that it's below some threshold
 - [x] Implement force feedback on the right arm
 - [x] Implement gravity compensation on the right arm
+- [ ] Migrate Isaac/cuMotion RMPflow integration toward the recommended API path (`load_cumotion_robot()` / `RmpFlowController`) after current collision behavior is validated against the custom streaming server baseline
+  - References:
+    - https://docs.isaacsim.omniverse.nvidia.com/6.0.0/cumotion/tutorial_robot_configuration.html
+    - https://docs.isaacsim.omniverse.nvidia.com/6.0.0/manipulators/concepts/rmpflow.html
