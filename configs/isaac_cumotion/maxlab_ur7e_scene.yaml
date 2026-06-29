@@ -1,0 +1,45 @@
+# MaxLab dual-UR7e scene metadata for Isaac Sim 6 cuMotion RMPFlow setup.
+#
+# The UR arm source path keeps the legacy "ur5e" name, but MaxLab comments say
+# this model is retuned and should be treated as UR7e for this project.
+
+assets:
+  maxlab_builder: /home/srianumakonda/maxlab/sim/build_urtable.py
+  source_arm_mjcf: /home/srianumakonda/maxlab/sim/universal_robots_ur5e/ur5e.xml
+  source_gripper_mjcf: /home/srianumakonda/maxlab/sim/gripper/robotiq-2f85.xml
+
+table:
+  board_top_z: 0.775
+  half_extents: [0.8625, 0.57, 0.0075]
+
+bases:
+  left:
+    pos: [-0.7425, -0.005, 0.766]
+    yaw_rad: 1.57079632679
+    quat_wxyz: [0.70710678, 0.0, 0.0, 0.70710678]
+    mjcf_base_quat_wxyz: [0.0, 0.0, 0.0, -1.0]
+    world_from_backend_base:
+      pos: [-0.7425, -0.005, 0.766]
+      yaw_rad: -1.57079632679
+      quat_wxyz: [0.70710678, 0.0, 0.0, -0.70710678]
+  right:
+    pos: [0.7425, -0.005, 0.766]
+    yaw_rad: -1.57079632679
+    quat_wxyz: [0.70710678, 0.0, 0.0, -0.70710678]
+    mjcf_base_quat_wxyz: [0.0, 0.0, 0.0, -1.0]
+    world_from_backend_base:
+      pos: [0.7425, -0.005, 0.766]
+      yaw_rad: 1.57079632679
+      quat_wxyz: [0.70710678, 0.0, 0.0, 0.70710678]
+
+factr_real_to_sim_offsets:
+  left_wrist_3: 1.57079632679
+  right_wrist_3: 3.14159265359
+
+factr_initial_match_joint_pos_real:
+  left: [1.5700, -1.5700, 1.5700, -1.5700, -1.5700, -1.5700]
+  right: [-1.5700, -1.5700, -1.5700, -1.5700, 1.5700, 0.0000]
+
+sim_home_position_from_openpi_scene:
+  left: [1.57, -1.134, 1.134, -1.5708, -1.5708, 1.5708]
+  right: [1.57, -1.134, 1.134, -1.5708, -1.5708, 3.1416]

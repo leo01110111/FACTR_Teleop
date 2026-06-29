@@ -1,0 +1,23 @@
+# ros
+build/
+install/
+log/
+
+# python
+__pycache__/
+*.egg-info
+
+# data
+raw_data
+generated/
+bags/
+plots/
+*.bag
+*.db3
+*.mcap
+
+# misc
+.vscode/*
+# but share the extension recommendations with everyone who clones the repo
+!.vscode/extensions.json
+AGENTS.md

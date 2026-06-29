@@ -1,0 +1,7 @@
+{
+  // Extensions VS Code will recommend when this repo is opened.
+  // Markdown All in One: toggle todo.md checkboxes (- [ ] <-> - [x]) with Alt+C.
+  "recommendations": [
+    "yzhang.markdown-all-in-one"
+  ]
+}
