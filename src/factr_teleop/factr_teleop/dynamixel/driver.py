@@ -55,6 +55,7 @@ POSITION_CONTROL_MODE = 3
 
 TORQUE_TO_CURRENT_MAPPING = {
     "XC330_T288_T": 1158.73,
+    "XM430_W350_T": 2300/4.10,
     "XM430_W210_T": 1000/2.69,
     # XL330-M077-T gripper (model 1190). Estimate (~ stall_current/stall_torque,
     # 1 mA current unit). Only used for gripper FORCE FEEDBACK, which is disabled in

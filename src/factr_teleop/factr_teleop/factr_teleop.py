@@ -208,8 +208,7 @@ class FACTRTeleop(Node, ABC):
         )
         workspace_root = get_workspace_root()
         urdf_model_path = os.path.join(workspace_root, self.leader_urdf)
-        urdf_model_dir = os.path.join(workspace_root, os.path.dirname(urdf_model_path))
-        self.pin_model, _, _ = pin.buildModelsFromUrdf(filename=urdf_model_path, package_dirs=urdf_model_dir)
+        self.pin_model = pin.buildModelFromUrdf(filename=urdf_model_path)
         self.pin_data = self.pin_model.createData()
 
     def _get_dynamixel_offsets(self, verbose=True):

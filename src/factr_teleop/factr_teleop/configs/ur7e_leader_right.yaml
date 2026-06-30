@@ -76,4 +76,9 @@ controller:
   gripper_feedback:
     enable: False
     ema_beta: 0.9
-    gain: 1.5
+    # On/off grasp-feedback torque magnitude (clamped by current_limit_ma below).
+    magnitude: 0.2
+    # Hard cap on the trigger (XL330-M077) motor current in mA. Continuous/rated
+    # is ~250 mA (~20% of stall); above that the motor overloads since it pushes
+    # against the operator's finger continuously. Enforced in software (gripper_feedback).
+    current_limit_ma: 250

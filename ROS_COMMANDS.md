@@ -29,6 +29,36 @@ ros2 launch launch/factr_teleop_ur7e.py \
   leader_match_only:=true
 ```
 
+## Leader Offset Calibration
+
+This opens only the leader Dynamixels. Torque stays off, the UR follower is not
+connected, and offsets are computed from the configured calibration pose before
+being verified against `initial_match_joint_pos`.
+
+Right dry run:
+
+```bash
+python3 leader_offset_calibrate.py ur7e_leader_right.yaml
+```
+
+Right write offsets:
+
+```bash
+python3 leader_offset_calibrate.py ur7e_leader_right.yaml --write
+```
+
+Left dry run:
+
+```bash
+python3 leader_offset_calibrate.py ur7e_leader_left.yaml
+```
+
+Left write offsets:
+
+```bash
+python3 leader_offset_calibrate.py ur7e_leader_left.yaml --write
+```
+
 ## Plain FACTR Teleop
 
 Right:

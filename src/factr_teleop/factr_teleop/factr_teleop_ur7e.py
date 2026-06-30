@@ -292,7 +292,11 @@ class FACTRTeleopUR7e(FACTRTeleop):
                 )
                 self.gripper = None
 
-    def _post_match_start(self):
+    def _post_match_start(self): 
+        # After leader matches the initial pos, we initialize UR states (wrench, joint positions)
+        # and start the fast servo command thread. Compared to the main leader loop, the fast servo
+        # thread allows us to be able to continuously send the same joint position command while the
+        # loop runs behind it
         q_hold, wrench_hold = self._read_robot_observation()
         with self._servo_lock:
             self._latest_ur_q = q_hold.copy()
@@ -353,6 +357,10 @@ class FACTRTeleopUR7e(FACTRTeleop):
 
             if target_q is not None:
                 try:
+                    # After we send a servoJ command, we then update our previous commanded joint positions
+                    # to operate as a fallback (so we hold the last commanded joint positions). By using 
+                    # _servo_lock, we ensure that no other variable can overwrite the following variables 
+                    # in the with ___ statement
                     self.rtde_c.servoJ(
                         list(map(float, target_q)),
                         0.0,
