@@ -3,11 +3,11 @@ name: right
 dynamixel:
   leader_name: "UR7e_right_leader"
   # by-id basename only — the code prepends "/dev/serial/by-id/"
-  # Arm 1 = FTBEO9N7. Arm 2 = FTBEO91I (currently connected as ttyUSB0).
-  dynamixel_port: "usb-FTDI_USB__-__Serial_Converter_FTBEO91I-if00-port0"
-  # 7 motors: 6 arm joints (XC330-T288-T) + 1 gripper (XL330-M077-T)
+  # Arm 1 = FTBEO9N7 (currently connected as ttyUSB0).
+  dynamixel_port: "usb-FTDI_USB__-__Serial_Converter_FTBEO9N7-if00-port0"
+  # 7 motors: 2 shoulder/base XM430-W350-Ts, 4 XC330-T288-T arm joints, + 1 gripper (XL330-M077-T)
   servo_types: [
-    "XC330_T288_T", "XC330_T288_T", "XC330_T288_T",
+    "XM430_W350_T", "XM430_W350_T", "XC330_T288_T",
     "XC330_T288_T", "XC330_T288_T", "XC330_T288_T",
     "XL330_M077_T",
   ]

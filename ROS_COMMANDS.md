@@ -123,6 +123,38 @@ ros2 launch launch/factr_teleop_ur7e.py \
   collision_safety:=true
 ```
 
+## Return UR To Initial Match Pose
+
+Right:
+
+```bash
+ros2 run factr_teleop return_ur_to_initial_match \
+  --config-file ur7e_leader_right.yaml
+```
+
+Left:
+
+```bash
+ros2 run factr_teleop return_ur_to_initial_match \
+  --config-file ur7e_leader_left.yaml
+```
+
+## Tune Leader Gravity Compensation
+
+Right:
+
+```bash
+python leader_grav_comp_test.py ur7e_leader_right.yaml
+```
+
+Left:
+
+```bash
+python leader_grav_comp_test.py ur7e_leader_left.yaml
+```
+
+# Note; this is RMP stuff, still have yet to verify that everything works (and RMP is not tuned yet)
+
 ## Bimanual UR7e With Isaac Sim 6 / cuMotion RMPFlow
 
 This is the active Isaac backend. The cuMotion server runs in `env_isaaclab6`
@@ -336,34 +368,4 @@ timeout 10 ros2 topic echo /factr_teleop/left/observation_hz
 timeout 10 ros2 topic echo /factr_teleop/left/leader_hz
 timeout 10 ros2 topic echo /factr_teleop/isaac_cumotion_stream/controller_hz
 timeout 10 ros2 topic hz /factr_teleop/left/safe_ur_pos
-```
-
-## Return UR To Initial Match Pose
-
-Right:
-
-```bash
-ros2 run factr_teleop return_ur_to_initial_match \
-  --config-file ur7e_leader_right.yaml
-```
-
-Left:
-
-```bash
-ros2 run factr_teleop return_ur_to_initial_match \
-  --config-file ur7e_leader_left.yaml
-```
-
-## Tune Leader Gravity Compensation
-
-Right:
-
-```bash
-python leader_grav_comp_test.py ur7e_leader_right.yaml
-```
-
-Left:
-
-```bash
-python leader_grav_comp_test.py ur7e_leader_left.yaml
 ```
