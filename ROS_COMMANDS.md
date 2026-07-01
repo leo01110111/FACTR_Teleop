@@ -35,22 +35,10 @@ This opens only the leader Dynamixels. Torque stays off, the UR follower is not
 connected, and offsets are computed from the configured calibration pose before
 being verified against `initial_match_joint_pos`.
 
-Right dry run:
-
-```bash
-python3 leader_offset_calibrate.py ur7e_leader_right.yaml
-```
-
 Right write offsets:
 
 ```bash
 python3 leader_offset_calibrate.py ur7e_leader_right.yaml --write
-```
-
-Left dry run:
-
-```bash
-python3 leader_offset_calibrate.py ur7e_leader_left.yaml
 ```
 
 Left write offsets:
@@ -75,6 +63,36 @@ Left:
 ros2 launch launch/factr_teleop_ur7e.py \
   config_file:=ur7e_leader_left.yaml \
   node_name:=factr_teleop_ur7e_left
+```
+
+## Return UR To Initial Match Pose
+
+Right:
+
+```bash
+ros2 run factr_teleop return_ur_to_initial_match \
+  --config-file ur7e_leader_right.yaml
+```
+
+Left:
+
+```bash
+ros2 run factr_teleop return_ur_to_initial_match \
+  --config-file ur7e_leader_left.yaml
+```
+
+## Tune Leader Gravity Compensation
+
+Right:
+
+```bash
+python leader_grav_comp_test.py ur7e_leader_right.yaml
+```
+
+Left:
+
+```bash
+python leader_grav_comp_test.py ur7e_leader_left.yaml
 ```
 
 ## Bimanual UR7e With OpenPI-YAM QP Collision Monitor
@@ -121,36 +139,6 @@ ros2 launch launch/factr_teleop_ur7e.py \
   config_file:=ur7e_leader_right.yaml \
   node_name:=factr_teleop_ur7e_right \
   collision_safety:=true
-```
-
-## Return UR To Initial Match Pose
-
-Right:
-
-```bash
-ros2 run factr_teleop return_ur_to_initial_match \
-  --config-file ur7e_leader_right.yaml
-```
-
-Left:
-
-```bash
-ros2 run factr_teleop return_ur_to_initial_match \
-  --config-file ur7e_leader_left.yaml
-```
-
-## Tune Leader Gravity Compensation
-
-Right:
-
-```bash
-python leader_grav_comp_test.py ur7e_leader_right.yaml
-```
-
-Left:
-
-```bash
-python leader_grav_comp_test.py ur7e_leader_left.yaml
 ```
 
 # Note; this is RMP stuff, still have yet to verify that everything works (and RMP is not tuned yet)
