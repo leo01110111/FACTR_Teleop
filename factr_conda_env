@@ -8,7 +8,7 @@
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-source /home/srianumakonda/anaconda3/etc/profile.d/conda.sh
+source /home/leo/anaconda3/etc/profile.d/conda.sh
 conda activate factr_teleop
 
 # Source ROS after activating conda so ROS Python paths are not cleared by conda

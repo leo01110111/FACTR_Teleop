@@ -21,7 +21,7 @@ import zmq
 
 REQUEST_SCHEMA = "factr.isaac_cumotion.request.v1"
 RESPONSE_SCHEMA = "factr.isaac_cumotion.response.v1"
-REPO_DIR = Path("/home/srianumakonda/FACTR_Teleop")
+REPO_DIR = Path("/home/leo/factr_teleop_ur7e")
 DEFAULT_CONFIG_DIR = REPO_DIR / "configs/isaac_cumotion/maxlab_ur7e_right"
 DEFAULT_SCENE_METADATA = REPO_DIR / "configs/isaac_cumotion/maxlab_ur7e_scene.yaml"
 DEFAULT_INPUT_ENDPOINT = "tcp://127.0.0.1:5568"

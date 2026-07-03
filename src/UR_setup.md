@@ -94,7 +94,7 @@ Do these in order every session:
 6. Open a shell that is in the `dialout` group (needed for the Dynamixel U2D2):
    ```
    groups | grep dialout        # if missing, log out/in, or use: sg dialout -c '...'
-   cd ~/FACTR_Teleop
+   cd ~/factr_teleop_ur7e
    source ./factr_env           # ROS 2 Jazzy + .venv + workspace overlay
    ```
 7. Launch FACTR (left arm):
@@ -138,7 +138,7 @@ The exact sequence that works, with the gotchas that bite in practice.
    times out with `RTDE control program is not running on controller, before
    timeout of 60 seconds`). Launch from a `dialout` shell:
    ```
-   cd ~/FACTR_Teleop
+   cd ~/factr_teleop_ur7e
    sg dialout -c 'bash -c "source ./factr_env && \
      ros2 launch launch/factr_teleop_ur7e.py config_file:=ur7e_leader_left.yaml"'
    ```

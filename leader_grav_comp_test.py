@@ -7,6 +7,11 @@ URDF, computes Pinocchio gravity torque, and writes current commands to the six
 arm motors. It does not connect RTDE, start ROS, move the follower, or apply
 force feedback.
 
+Requires sim_offsets_<leader_name>.yaml (from leader_sim_offset_calibrate.py):
+pin.rnea needs the arm state in the URDF's own joint convention, which is not
+the same as offsets_<leader_name>.json / dynamixel.joint_signs (those align
+the leader to the follower UR's calibration stance instead).
+
 Usage:
     python leader_grav_comp_test.py ur7e_leader_left.yaml
     python leader_grav_comp_test.py ur7e_leader_right.yaml
@@ -54,6 +59,36 @@ def load_offsets(config):
     )
     with open(offset_path, "r") as f:
         return np.array(json.load(f), dtype=float), offset_path
+
+
+def load_sim_offsets(config):
+    """
+    Raw-motor -> Pinocchio/URDF-convention offset and joint_signs (see
+    leader_sim_offset_calibrate.py). NOT the same as offsets_<leader_name>.json
+    / dynamixel.joint_signs above, which align raw motor readings to the
+    follower UR's joint convention instead -- the URDF's own zero pose and
+    joint axis directions have no reason to agree with the UR's calibration
+    stance, so gravity comp (which runs pin.rnea against the URDF model) needs
+    this separate mapping.
+    """
+    offset_filename = f"sim_offsets_{config['dynamixel']['leader_name']}.yaml"
+    offset_path = os.path.join(
+        get_workspace_root(),
+        "src/factr_teleop/factr_teleop/configs",
+        offset_filename,
+    )
+    if not os.path.isfile(offset_path):
+        raise FileNotFoundError(
+            f"No sim offsets file found at {offset_path}. Run "
+            "leader_sim_offset_calibrate.py first to generate it."
+        )
+    with open(offset_path, "r") as f:
+        sim_config = yaml.safe_load(f)
+    return (
+        np.array(sim_config["offset"], dtype=float),
+        np.array(sim_config["joint_signs"], dtype=float),
+        offset_path,
+    )
 
 
 def build_pin_model(config):
@@ -166,6 +201,12 @@ def main():
     joint_signs = np.array(config["dynamixel"]["joint_signs"], dtype=float)
     port = "/dev/serial/by-id/" + config["dynamixel"]["dynamixel_port"]
     offsets, offset_path = load_offsets(config)
+    sim_offsets, sim_joint_signs, sim_offset_path = load_sim_offsets(config)
+    sim_joint_signs = sim_joint_signs[:num_arm_joints]
+    # Elementwise sign flip to convert a torque conjugate to the sim/URDF joint
+    # convention into one conjugate to the follower joint convention (both
+    # parametrize the same physical joint, just with different signs/offsets).
+    sim_to_follower_torque_sign = sim_joint_signs * joint_signs[:num_arm_joints]
     pin_model, pin_data, urdf_path = build_pin_model(config)
     reference = np.array(
         config["arm_teleop"]["initialization"]["initial_match_joint_pos"],
@@ -175,12 +216,13 @@ def main():
         config["arm_teleop"]["initialization"].get("normalize_joint_angles", False)
     )
 
-    print(f"Config:  {config_path}")
-    print(f"Offsets: {offset_path}")
-    print(f"URDF:    {urdf_path}")
-    print(f"Port:    {port}")
-    print(f"Gains:   {np.array2string(gains, precision=3, floatmode='fixed')}")
-    print(f"Source:  {gains_source}")
+    print(f"Config:      {config_path}")
+    print(f"Offsets:     {offset_path}")
+    print(f"Sim offsets: {sim_offset_path}")
+    print(f"URDF:        {urdf_path}")
+    print(f"Port:        {port}")
+    print(f"Gains:       {np.array2string(gains, precision=3, floatmode='fixed')}")
+    print(f"Source:      {gains_source}")
     print("No RTDE, no follower, no force feedback.")
     if args.dry_run:
         print("Dry run: torque will remain OFF.\n")
@@ -210,7 +252,12 @@ def main():
             if normalize:
                 q = normalize_to_reference(q, reference)
 
-            tau_model = pin.rnea(pin_model, pin_data, q, zeros, zeros)
+            # pin.rnea needs the arm state in the URDF's own joint convention,
+            # not the follower-aligned `q` above -- see load_sim_offsets().
+            q_sim = (raw_pos[:num_arm_joints] - sim_offsets[:num_arm_joints]) * sim_joint_signs
+
+            tau_model_sim = pin.rnea(pin_model, pin_data, q_sim, zeros, zeros)
+            tau_model = tau_model_sim * sim_to_follower_torque_sign
             tau = tau_model * gains
             cmd_torque = np.append(tau, 0.0) * joint_signs
             if not args.dry_run:
@@ -221,6 +268,8 @@ def main():
                 print(
                     "q="
                     + np.array2string(q, precision=2, floatmode="fixed")
+                    + " q_sim="
+                    + np.array2string(q_sim, precision=2, floatmode="fixed")
                     + " tau_model="
                     + np.array2string(tau_model, precision=2, floatmode="fixed")
                     + " tau="

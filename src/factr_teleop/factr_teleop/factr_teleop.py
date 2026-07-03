@@ -203,13 +203,47 @@ class FACTRTeleop(Node, ABC):
         computations used in gravity compensation and null-space regulation calculations.
         """
         self.leader_urdf = os.path.join(
-            'src/factr_teleop/factr_teleop/urdf/', 
+            'src/factr_teleop/factr_teleop/urdf/',
             self.config["arm_teleop"]["leader_urdf"]
         )
         workspace_root = get_workspace_root()
         urdf_model_path = os.path.join(workspace_root, self.leader_urdf)
-        self.pin_model = pin.buildModelFromUrdf(filename=urdf_model_path)
+        self.pin_model = pin.buildModelFromUrdf(urdf_model_path)
         self.pin_data = self.pin_model.createData()
+
+        # pin_model's kinematics/dynamics are defined in the URDF's own joint
+        # convention (zero pose and axis directions from onshape-to-robot),
+        # which has no reason to agree with dynamixel.joint_signs / joint_offsets
+        # above (those align the leader to the follower UR's calibration
+        # stance). Gravity comp and null-space regulation need raw motor
+        # readings mapped into the URDF's convention instead, via a
+        # separately-calibrated sim_offsets_<leader_name>.yaml (see
+        # leader_sim_offset_calibrate.py / visualize_leader_urdf.py).
+        num_arm_joints = self.config["arm_teleop"]["num_arm_joints"]
+        sim_offset_filename = f"sim_offsets_{self.config['dynamixel']['leader_name']}.yaml"
+        sim_offset_path = os.path.join(
+            workspace_root, "src/factr_teleop/factr_teleop/configs", sim_offset_filename
+        )
+        if not os.path.isfile(sim_offset_path):
+            raise FileNotFoundError(
+                f"No sim offsets file found at {sim_offset_path}. Run "
+                "leader_sim_offset_calibrate.py first to generate it -- gravity "
+                "compensation and null-space regulation need it to map raw motor "
+                "readings into the URDF's own joint convention."
+            )
+        with open(sim_offset_path, 'r') as f:
+            sim_config = yaml.safe_load(f)
+        self.sim_joint_offsets = np.array(sim_config["offset"], dtype=float)
+        self.sim_joint_signs = np.array(sim_config["joint_signs"], dtype=float)[0:num_arm_joints]
+
+        # Elementwise sign flip to convert a torque conjugate to the sim/URDF
+        # joint convention into one conjugate to the follower joint convention
+        # (both parametrize the same physical joint, just with different
+        # signs/offsets) -- see get_leader_joint_states() and
+        # gravity_compensation()/null_space_regulation().
+        self.sim_to_follower_torque_sign = (
+            self.sim_joint_signs * self.joint_signs[0:num_arm_joints]
+        )
 
     def _get_dynamixel_offsets(self, verbose=True):
         """
@@ -250,12 +284,19 @@ class FACTRTeleop(Node, ABC):
         for i in range(self.num_arm_joints):
             best_offset = 0
             best_error = 1e9
-            # intervals of pi/2
-            for offset in np.linspace(-20 * np.pi, 20 * np.pi, 20 * 4 + 1):  
-                error = _get_error(self.calibration_joint_pos, offset, i, curr_joints)
-                if error < best_error:
-                    best_error = error
-                    best_offset = offset
+            # intervals of pi/20 for the first 2 motors and pi/2 for the rest
+            if i < 2:
+                for offset in np.linspace(-20 * np.pi, 20 * np.pi, 20 * 20 + 1):
+                    error = _get_error(self.calibration_joint_pos, offset, i, curr_joints)
+                    if error < best_error:
+                        best_error = error
+                        best_offset = offset
+            else:
+                for offset in np.linspace(-20 * np.pi, 20 * np.pi, 20 * 4 + 1):
+                    error = _get_error(self.calibration_joint_pos, offset, i, curr_joints)
+                    if error < best_error:
+                        best_error = error
+                        best_offset = offset
             self.joint_offsets.append(best_offset)
 
         # get gripper offset:
@@ -281,7 +322,7 @@ class FACTRTeleop(Node, ABC):
         Waits until the leader arm is manually moved to roughly the same configuration as the 
         follower arm before the follower arm starts mirroring the leader arm. 
         """
-        curr_pos, _, curr_gripper_pos, _ = self.get_leader_joint_states()
+        curr_pos, _, curr_gripper_pos, _, _, _ = self.get_leader_joint_states()
         printed_match_status = False
         printed_match_lines = 0
         while True:
@@ -318,8 +359,8 @@ class FACTRTeleop(Node, ABC):
             sys.stdout.flush()
             printed_match_status = True
             printed_match_lines = len(status_lines)
-            curr_pos, _, curr_gripper_pos, _ = self.get_leader_joint_states()
-            time.sleep(0.5)
+            curr_pos, _, curr_gripper_pos, _, _, _ = self.get_leader_joint_states()
+            time.sleep(0.25)
         if printed_match_status:
             print()
         self.get_logger().info(f"FACTR TELEOP {self.name}: Initial joint position matched.")
@@ -350,7 +391,9 @@ class FACTRTeleop(Node, ABC):
     def get_leader_joint_states(self):
         """
         Returns the current joint positions and velocities of the leader arm and gripper,
-        aligned with the joint conventions (range and direction) of the follower arm.
+        aligned with the joint conventions (range and direction) of the follower arm, plus
+        the arm joint position/velocity in the URDF/pin_model's own convention (for gravity
+        compensation and null-space regulation -- see _prepare_inverse_dynamics()).
         """
         self.gripper_pos_prev = self.gripper_pos
         joint_pos, joint_vel = self.driver.get_positions_and_velocities()
@@ -360,9 +403,15 @@ class FACTRTeleop(Node, ABC):
         joint_pos_arm = self._normalize_leader_arm_pos(joint_pos_arm)
         self.gripper_pos = (joint_pos[-1] - self.joint_offsets[-1]) * self.joint_signs[-1]
         joint_vel_arm = joint_vel[0:self.num_arm_joints] * self.joint_signs[0:self.num_arm_joints]
-        
+
         gripper_vel = (self.gripper_pos - self.gripper_pos_prev) / self.dt
-        return joint_pos_arm, joint_vel_arm, self.gripper_pos, gripper_vel
+
+        joint_pos_arm_sim = (
+            joint_pos[0:self.num_arm_joints] - self.sim_joint_offsets[0:self.num_arm_joints]
+        ) * self.sim_joint_signs
+        joint_vel_arm_sim = joint_vel[0:self.num_arm_joints] * self.sim_joint_signs
+
+        return joint_pos_arm, joint_vel_arm, self.gripper_pos, gripper_vel, joint_pos_arm_sim, joint_vel_arm_sim
     
     def set_leader_joint_pos(self, goal_joint_pos, goal_gripper_pos):
         """
@@ -380,7 +429,7 @@ class FACTRTeleop(Node, ABC):
         kp = self.config["controller"]["joint_position_control"]["kp"]
         kd = self.config["controller"]["joint_position_control"]["kd"]
 
-        curr_pos, curr_vel, curr_gripper_pos, curr_gripper_vel = self.get_leader_joint_states()
+        curr_pos, curr_vel, curr_gripper_pos, curr_gripper_vel, _, _ = self.get_leader_joint_states()
         while (np.linalg.norm(curr_pos - goal_joint_pos) > 0.1):
             next_joint_pos_target = np.where(
                 np.abs(curr_pos - goal_joint_pos) > interpolation_step_size, 
@@ -390,7 +439,7 @@ class FACTRTeleop(Node, ABC):
             torque = -kp*(curr_pos-next_joint_pos_target)-kd*(curr_vel)
             gripper_torque = -kp*(curr_gripper_pos-goal_gripper_pos)-kd*(curr_gripper_vel)
             self.set_leader_joint_torque(torque, gripper_torque)
-            curr_pos, curr_vel, curr_gripper_pos, curr_gripper_vel = self.get_leader_joint_states()
+            curr_pos, curr_vel, curr_gripper_pos, curr_gripper_vel, _, _ = self.get_leader_joint_states()
     
     def set_leader_joint_torque(self, arm_torque, gripper_torque):
         """
@@ -429,22 +478,28 @@ class FACTRTeleop(Node, ABC):
         tau_l_gripper = 0.0
         return tau_l, tau_l_gripper
 
-    def gravity_compensation(self, arm_joint_pos, arm_joint_vel):
+    def gravity_compensation(self, arm_joint_pos_sim, arm_joint_vel_sim):
         """
         Computes joint torque for gravity compensation using inverse dynamics.
-        This method uses the Recursive Newton-Euler Algorithm (RNEA), provided by the 
-        Pinocchio library, to calculate the torques required to counteract gravity 
-        at the current joint states. The result is scaled by a modifier to tune the 
+        This method uses the Recursive Newton-Euler Algorithm (RNEA), provided by the
+        Pinocchio library, to calculate the torques required to counteract gravity
+        at the current joint states. The result is scaled by a modifier to tune the
         compensation strength.
 
-        This implementation corresponds to the gravity compensation strategy 
+        This implementation corresponds to the gravity compensation strategy
         described in Section III.C of the paper.
+
+        arm_joint_pos_sim/arm_joint_vel_sim must be in the URDF/pin_model's own
+        joint convention (see get_leader_joint_states()); the resulting torque is
+        converted back to the follower joint convention (via
+        sim_to_follower_torque_sign) before being returned, since torque_arm is
+        accumulated and applied in that convention by set_leader_joint_torque().
         """
-        self.tau_g = pin.rnea(
-            self.pin_model, self.pin_data, 
-            arm_joint_pos, arm_joint_vel, np.zeros_like(arm_joint_vel)
+        tau_g_sim = pin.rnea(
+            self.pin_model, self.pin_data,
+            arm_joint_pos_sim, arm_joint_vel_sim, np.zeros_like(arm_joint_vel_sim)
         )
-        self.tau_g *= self.gravity_comp_modifier 
+        self.tau_g = tau_g_sim * self.sim_to_follower_torque_sign * self.gravity_comp_modifier
         return self.tau_g
 
     def friction_compensation(self, arm_joint_vel):
@@ -466,25 +521,33 @@ class FACTRTeleop(Node, ABC):
                 self.stiction_dither_flag[i] = ~self.stiction_dither_flag[i]
         return tau_ss
     
-    def null_space_regulation(self, arm_joint_pos, arm_joint_vel):
+    def null_space_regulation(self, arm_joint_pos_sim, arm_joint_vel_sim):
         """
-        Computes joint torques to perform null-space regulation for redundancy resolution 
+        Computes joint torques to perform null-space regulation for redundancy resolution
         of the leader arm.
 
-        This method enables the specification of a desired null-space joint configuration 
-        via `self.null_space_joint_target`. It implements the control strategy described 
-        in Equation 3 of Section III.B in the paper, projecting a PD control law into 
-        the null space of the task Jacobian to achieve secondary objectives without 
+        This method enables the specification of a desired null-space joint configuration
+        via `self.null_space_joint_target`. It implements the control strategy described
+        in Equation 3 of Section III.B in the paper, projecting a PD control law into
+        the null space of the task Jacobian to achieve secondary objectives without
         affecting the primary task.
+
+        arm_joint_pos_sim/arm_joint_vel_sim must be in the URDF/pin_model's own joint
+        convention (see get_leader_joint_states() and gravity_compensation()); note
+        `null_space_joint_target` must therefore also be specified in that same
+        convention. The resulting torque is converted back to the follower joint
+        convention before being returned.
         """
         J = pin.computeJointJacobian(
-            self.pin_model, self.pin_data, arm_joint_pos, self.num_arm_joints
+            self.pin_model, self.pin_data, arm_joint_pos_sim, self.num_arm_joints
         )
         J_dagger = np.linalg.pinv(J)
         null_space_projector = np.eye(self.num_arm_joints) - J_dagger @ J
-        q_error = arm_joint_pos - self.null_space_joint_target[0:self.num_arm_joints]
-        tau_n = null_space_projector @ (-self.null_space_kp*q_error-self.null_space_kd*arm_joint_vel)
-        return tau_n
+        q_error = arm_joint_pos_sim - self.null_space_joint_target[0:self.num_arm_joints]
+        tau_n_sim = null_space_projector @ (
+            -self.null_space_kp*q_error - self.null_space_kd*arm_joint_vel_sim
+        )
+        return tau_n_sim * self.sim_to_follower_torque_sign
     
     def torque_feedback(self, external_torque, arm_joint_vel):
         """
@@ -507,7 +570,10 @@ class FACTRTeleop(Node, ABC):
         support a 500 Hz control frequency, ensure that the Baud Rate is set to 4 Mbps 
         and the Return Delay Time is set to 0 using the Dynamixel Wizard software.
         """
-        leader_arm_pos, leader_arm_vel, leader_gripper_pos, leader_gripper_vel = self.get_leader_joint_states()
+        (
+            leader_arm_pos, leader_arm_vel, leader_gripper_pos, leader_gripper_vel,
+            leader_arm_pos_sim, leader_arm_vel_sim,
+        ) = self.get_leader_joint_states()
 
         torque_arm = np.zeros(self.num_arm_joints)
         torque_l, torque_gripper = self.joint_limit_barrier(
@@ -515,10 +581,10 @@ class FACTRTeleop(Node, ABC):
         )
         torque_arm += torque_l
         if self.null_space_kp != 0.0 or self.null_space_kd != 0.0:
-            torque_arm += self.null_space_regulation(leader_arm_pos, leader_arm_vel)
+            torque_arm += self.null_space_regulation(leader_arm_pos_sim, leader_arm_vel_sim)
 
         if self.enable_gravity_comp:
-            torque_arm += self.gravity_compensation(leader_arm_pos, leader_arm_vel)
+            torque_arm += self.gravity_compensation(leader_arm_pos_sim, leader_arm_vel_sim)
             torque_arm += self.friction_compensation(leader_arm_vel)
         
         if self.enable_torque_feedback:

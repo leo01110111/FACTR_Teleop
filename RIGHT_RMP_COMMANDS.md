@@ -3,7 +3,7 @@
 ## Terminal 1: cuMotion RMP Server
 
 ```bash
-cd /home/srianumakonda/FACTR_Teleop
+cd /home/leo/factr_teleop_ur7e
 ./scripts/isaac_cumotion/run_cumotion_stream_server.sh \
   --mode rmp
 ```
@@ -11,7 +11,7 @@ cd /home/srianumakonda/FACTR_Teleop
 ## Terminal 2: ROS Bridge
 
 ```bash
-cd /home/srianumakonda/FACTR_Teleop
+cd /home/leo/factr_teleop_ur7e
 source ./factr_conda_env
 source install/setup.bash
 
@@ -26,7 +26,7 @@ ros2 launch launch/isaac_cumotion_stream_bridge.py \
 ## Terminal 3: Right Teleop
 
 ```bash
-cd /home/srianumakonda/FACTR_Teleop
+cd /home/leo/factr_teleop_ur7e
 source ./factr_conda_env
 source install/setup.bash
 
@@ -40,7 +40,7 @@ ros2 launch launch/factr_teleop_ur7e.py \
 ## Quick Checks
 
 ```bash
-cd /home/srianumakonda/FACTR_Teleop
+cd /home/leo/factr_teleop_ur7e
 source ./factr_conda_env
 source install/setup.bash
 

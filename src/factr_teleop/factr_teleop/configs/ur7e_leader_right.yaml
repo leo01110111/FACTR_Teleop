@@ -35,8 +35,7 @@ arm_teleop:
     calibration_joint_pos: [-2.2632, -3.0465, -0.0794, -1.5390, 3.1744, 0.0000] #changed
     
     # Physically place the leader in this pose at launch.
-    # initial_match_joint_pos: [1.64, -1.500, 1.29, -1.79, -1.56, -1.57]
-    initial_match_joint_pos: [-1.5700, -1.5700, -1.5700, -1.5700, 1.5700, 0.0000]
+    initial_match_joint_pos: [-1.5700, -1.5700, -1.5700, -1.5700, 1.5700, 1.57]
     normalize_joint_angles: true
 
 gripper_teleop:
@@ -50,14 +49,14 @@ gripper_teleop:
 controller:
   frequency: 500
   torque_feedback:
-    enable: True
+    enable: False
     gain: 3.0
     damping: 0.0
     motor_scalar: 94.5652173913
   gravity_comp:
-    enable: False
+    enable: True
     # Per-joint gains: [base, shoulder, elbow, wrist1, wrist2, wrist3].
-    gain: [2.0, 4.0, -3.0, -3.0, 0.85, 0.85]
+    gain: [0.0, 0.3, 0.85, 0.4, 0.4, 0.0]
   null_space_regulation:
     # Disabled: a 6-DOF arm doing a 6-DOF task is non-redundant (kp=kd=0 => no null-space torque).
     null_space_joint_target: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]

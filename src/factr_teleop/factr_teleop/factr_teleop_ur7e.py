@@ -394,7 +394,7 @@ class FACTRTeleopUR7e(FACTRTeleop):
 
     def _read_robot_observation(self):
         q = np.array(self.rtde_r.getActualQ(), dtype=np.float64)[:self.num_arm_joints]
-        wrench = -np.array(self.rtde_r.getActualTCPForce(), dtype=np.float64)
+        wrench = np.array(self.rtde_r.getActualTCPForce(), dtype=np.float64)
         return q, wrench
 
     def _cache_robot_observation(self, q, wrench):

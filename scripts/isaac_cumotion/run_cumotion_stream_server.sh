@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_DIR="${REPO_DIR:-/home/srianumakonda/FACTR_Teleop}"
+REPO_DIR="${REPO_DIR:-/home/leo/factr_teleop_ur7e}"
 ISAAC_CONDA_ENV="${ISAAC_CONDA_ENV:-env_isaaclab6}"
 CONDA_SH="${CONDA_SH:-/home/srianumakonda/anaconda3/etc/profile.d/conda.sh}"
 ISAAC_SITE="${ISAAC_SITE:-/home/srianumakonda/anaconda3/envs/${ISAAC_CONDA_ENV}/lib/python3.12/site-packages/isaacsim}"

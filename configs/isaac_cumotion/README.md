@@ -22,7 +22,7 @@ trusted.
 Terminal 1, Isaac Sim 6 / cuMotion RMPFlow:
 
 ```bash
-cd /home/srianumakonda/FACTR_Teleop
+cd /home/leo/factr_teleop_ur7e
 
 bash scripts/isaac_cumotion/run_cumotion_stream_server.sh \
   --mode rmp \
@@ -38,7 +38,7 @@ bash scripts/isaac_cumotion/run_cumotion_stream_server.sh \
 Terminal 2, ROS stream bridge:
 
 ```bash
-cd /home/srianumakonda/FACTR_Teleop
+cd /home/leo/factr_teleop_ur7e
 source ./factr_conda_env
 source install/setup.bash
 

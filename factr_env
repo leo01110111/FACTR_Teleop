@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Activate the FACTR_Teleop environment:
+# Activate the factr_teleop_ur7e environment:
 #   1) ROS 2 Jazzy underlay
 #   2) the repo's uv virtualenv (.venv)
 #   3) the colcon workspace overlay (install/setup.bash)

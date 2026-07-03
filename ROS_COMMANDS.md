@@ -3,7 +3,7 @@
 ## Setup Shell
 
 ```bash
-cd /home/srianumakonda/FACTR_Teleop
+cd /home/leo/factr_teleop_ur7e
 source factr_conda_env
 colcon build --packages-select factr_teleop
 source install/setup.bash
@@ -103,7 +103,7 @@ same time as an Isaac cuMotion bridge that publishes `/factr_teleop/<side>/safe_
 Terminal 1:
 
 ```bash
-cd /home/srianumakonda/FACTR_Teleop
+cd /home/leo/factr_teleop_ur7e
 source ./factr_conda_env
 source install/setup.bash
 
@@ -118,7 +118,7 @@ ros2 launch launch/ur7e_collision_monitor.py \
 Terminal 2:
 
 ```bash
-cd /home/srianumakonda/FACTR_Teleop
+cd /home/leo/factr_teleop_ur7e
 source ./factr_conda_env
 source install/setup.bash
 
@@ -131,7 +131,7 @@ ros2 launch launch/factr_teleop_ur7e.py \
 Terminal 3:
 
 ```bash
-cd /home/srianumakonda/FACTR_Teleop
+cd /home/leo/factr_teleop_ur7e
 source ./factr_conda_env
 source install/setup.bash
 
@@ -161,7 +161,7 @@ Use this when testing RMP tracking without collision avoidance. The active
 Terminal 1: start the cuMotion RMP server.
 
 ```bash
-cd /home/srianumakonda/FACTR_Teleop
+cd /home/leo/factr_teleop_ur7e
 ./scripts/isaac_cumotion/run_cumotion_stream_server.sh \
   --mode rmp
 ```
@@ -169,7 +169,7 @@ cd /home/srianumakonda/FACTR_Teleop
 Terminal 2: start the ROS bridge and publish RMP safe targets.
 
 ```bash
-cd /home/srianumakonda/FACTR_Teleop
+cd /home/leo/factr_teleop_ur7e
 source ./factr_conda_env
 source install/setup.bash
 
@@ -184,7 +184,7 @@ ros2 launch launch/isaac_cumotion_stream_bridge.py \
 Terminal 3: start right teleop using the RMP safe targets.
 
 ```bash
-cd /home/srianumakonda/FACTR_Teleop
+cd /home/leo/factr_teleop_ur7e
 source ./factr_conda_env
 source install/setup.bash
 
@@ -198,7 +198,7 @@ ros2 launch launch/factr_teleop_ur7e.py \
 Diagnostic terminal:
 
 ```bash
-cd /home/srianumakonda/FACTR_Teleop
+cd /home/leo/factr_teleop_ur7e
 source ./factr_conda_env
 source install/setup.bash
 
@@ -210,7 +210,7 @@ ros2 topic echo /factr_teleop/right/isaac_cumotion_safe_error
 Quick health check after the leader has calibrated:
 
 ```bash
-cd /home/srianumakonda/FACTR_Teleop
+cd /home/leo/factr_teleop_ur7e
 source ./factr_conda_env
 source install/setup.bash
 
@@ -260,7 +260,7 @@ against the right arm as a static dynamic obstacle.
 Terminal 1: publish the right UR state as the obstacle at 500 Hz.
 
 ```bash
-cd /home/srianumakonda/FACTR_Teleop
+cd /home/leo/factr_teleop_ur7e
 source ./factr_conda_env
 source install/setup.bash
 
@@ -298,7 +298,7 @@ PY
 Terminal 2: run the cuMotion/RMP server.
 
 ```bash
-cd /home/srianumakonda/FACTR_Teleop
+cd /home/leo/factr_teleop_ur7e
 
 bash scripts/isaac_cumotion/run_cumotion_stream_server.sh \
   --mode rmp \
@@ -312,7 +312,7 @@ bash scripts/isaac_cumotion/run_cumotion_stream_server.sh \
 Terminal 3: run the ROS bridge.
 
 ```bash
-cd /home/srianumakonda/FACTR_Teleop
+cd /home/leo/factr_teleop_ur7e
 source ./factr_conda_env
 source install/setup.bash
 
@@ -333,7 +333,7 @@ ros2 run factr_teleop isaac_cumotion_stream_bridge --ros-args \
 Terminal 4: run left teleop with collision safety.
 
 ```bash
-cd /home/srianumakonda/FACTR_Teleop
+cd /home/leo/factr_teleop_ur7e
 source ./factr_conda_env
 source install/setup.bash
 
@@ -347,7 +347,7 @@ ros2 run factr_teleop factr_teleop_ur7e --ros-args \
 Diagnostic terminal: check the actual rates.
 
 ```bash
-cd /home/srianumakonda/FACTR_Teleop
+cd /home/leo/factr_teleop_ur7e
 source ./factr_conda_env
 source install/setup.bash
 
