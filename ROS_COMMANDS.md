@@ -38,13 +38,13 @@ being verified against `initial_match_joint_pos`.
 Right write offsets:
 
 ```bash
-python3 leader_offset_calibrate.py ur7e_leader_right.yaml --write
+python3 utils/leader_offset_calibrate.py ur7e_leader_right.yaml --write
 ```
 
 Left write offsets:
 
 ```bash
-python3 leader_offset_calibrate.py ur7e_leader_left.yaml --write
+python3 utils/leader_offset_calibrate.py ur7e_leader_left.yaml --write
 ```
 
 ## Plain FACTR Teleop
@@ -86,13 +86,13 @@ ros2 run factr_teleop return_ur_to_initial_match \
 Right:
 
 ```bash
-python leader_grav_comp_test.py ur7e_leader_right.yaml
+python utils/leader_grav_comp_test.py ur7e_leader_right.yaml
 ```
 
 Left:
 
 ```bash
-python leader_grav_comp_test.py ur7e_leader_left.yaml
+python utils/leader_grav_comp_test.py ur7e_leader_left.yaml
 ```
 
 ## Bimanual UR7e With OpenPI-YAM QP Collision Monitor

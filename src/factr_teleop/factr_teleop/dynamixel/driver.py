@@ -152,6 +152,16 @@ class DynamixelDriver(DynamixelDriverProtocol):
         if dxl_comm_result == COMM_SUCCESS and dxl_error == 0:
             return
 
+        # When DISABLING torque, a non-zero dxl_error is just the motor's standing
+        # hardware-error alert bit (e.g. overload) -- the disable write still reached
+        # it and its protection already de-energized it. Rebooting here would only
+        # power-cycle the servo during shutdown (the visible "power cut -> recharge").
+        # Only reboot to clear an error when we actually need torque ON.
+        if torque_value == TORQUE_DISABLE:
+            if dxl_comm_result == COMM_SUCCESS:
+                return
+            raise RuntimeError(f"Failed to disable torque for Dynamixel with ID {dxl_id}")
+
         hw_status, hw_comm_result, _ = self._packetHandler.read1ByteTxRx(
             self._portHandler, dxl_id, ADDR_HARDWARE_ERROR_STATUS
         )
@@ -169,6 +179,25 @@ class DynamixelDriver(DynamixelDriverProtocol):
                 return
 
         raise RuntimeError(f"Failed to set torque mode for Dynamixel with ID {dxl_id}")
+
+    def recover_port(self):
+        """
+        Recovers the serial port after a transaction was interrupted mid-flight
+        (e.g. a KeyboardInterrupt fired inside txRxPacket/txPacket). Such an
+        interruption leaves PortHandler.is_using stuck True -- so every later
+        call returns COMM_PORT_BUSY (-1000) -- and can leave a stale groupSyncWrite
+        param, so addParam() then fails. Clearing both restores comms without
+        reopening the port. groupSyncRead's params are the persistent per-servo
+        read registrations set up in __init__, so they are intentionally left
+        intact.
+        """
+        with self._lock:
+            self._portHandler.is_using = False
+            self._groupSyncWrite.clearParam()
+            try:
+                self._portHandler.clearPort()
+            except Exception:
+                pass
 
     def close(self):
         self._portHandler.closePort()

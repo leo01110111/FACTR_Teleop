@@ -33,7 +33,10 @@ arm_teleop:
   initialization:
     #The joint angles of the UR when its in calibration stance.
     calibration_joint_pos: [-2.2632, -3.0465, -0.0794, -1.5390, 3.1744, 0.0000] #changed
-    
+
+    # Pose the leader arm is jogged to on shutdown (copy of calibration_joint_pos).
+    end_pose: [-3, -3.0465, -0.0794, -1.5390, 3.1744, 0.0000]
+
     # Physically place the leader in this pose at launch.
     initial_match_joint_pos: [-1.5700, -1.5700, -1.5700, -1.5700, 1.5700, 1.57]
     normalize_joint_angles: true
@@ -41,6 +44,7 @@ arm_teleop:
 gripper_teleop:
   # max range (rad) of the leader gripper trigger
   actuation_range: 0.9
+  spring_constant: -0.01
   speed: 255
   force: 128
   # 255 is closed 0 is open for robotiq 2f-85 grippr
@@ -72,6 +76,14 @@ controller:
     interpolation_step_size: 0.5
     kp: 1.03561658022
     kd: 0.04315069084
+    # Shutdown return-home motion (staged: base -> wrists -> long links).
+    # PI controller (+ gravity comp): the ~110 Hz shutdown loop is too slow for a
+    # stiff PD, so keep kp LOW (stable) and let the integral reach the goal.
+    return_home_speed: 0.5     # rad/s per joint; lower = slower/gentler
+    return_home_kp: 0.5        # low: high kp oscillates at the low shutdown loop rate
+    return_home_ki: 1.0        # integral: ramps torque until the joint reaches goal
+    return_home_i_clamp: 2.0   # anti-windup cap on the integral torque
+    return_home_kd: 0.0        # off: laggy Dynamixel velocity makes damping unstable here
   gripper_feedback:
     enable: False
     ema_beta: 0.9

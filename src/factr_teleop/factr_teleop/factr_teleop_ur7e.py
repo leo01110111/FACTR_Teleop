@@ -665,10 +665,17 @@ def main(args=None):
         while rclpy.ok():
             rclpy.spin(factr_teleop_ur7e)
     except KeyboardInterrupt:
-        factr_teleop_ur7e.get_logger().info("Keyboard interrupt received. Shutting down...")
-        factr_teleop_ur7e.shut_down()
+        # print() rather than get_logger(): rclpy's context is already shutting
+        # down here, so a rosout publish would just warn "publisher's context is invalid".
+        print("Keyboard interrupt received. Shutting down...")
     finally:
-        rclpy.shutdown()
+        # Always run shut_down: under `ros2 launch`, rclpy's SIGINT handler
+        # consumes Ctrl+C and makes spin() return normally (no KeyboardInterrupt),
+        # so putting shut_down only in the except branch leaves Dynamixel torque
+        # enabled and the leader arm latched holding gravity comp.
+        factr_teleop_ur7e.shut_down()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == '__main__':

@@ -20,9 +20,13 @@ import rclpy
 from rclpy.node import Node
 from pynput import keyboard
 
+import json
 import pickle
+import threading
 from pathlib import Path
 from termcolor import colored
+
+import evdev
 
 from bc import utils
 from sensor_msgs.msg import JointState, Image
@@ -47,17 +51,30 @@ class DataRecord(Node):
             self.output_dir.mkdir(parents=True, exist_ok=True)
         self.get_logger().info(f"Saving to {self.output_dir}")
         
-        self.recording = False 
+        self.recording = False
 
         listener = keyboard.Listener(on_press=self.on_press_key)
         listener.start()
-        
+
+        # Foot pedal support (PCsensor FootSwitch or similar).
+        # left pedal  -> start / stop an episode (same as SPACE)
+        # right pedal -> delete the most recent episode (same as DELETE)
+        self.declare_parameter('foot_pedal_device', "FootSwitch")
+        self.foot_pedal_device = self.get_parameter('foot_pedal_device').value
+        # Persisted keycode->pedal mapping so we only calibrate once.
+        self.foot_pedal_config_path = self.output_dir.parent / ".foot_pedal.json"
+        self.start_foot_pedal_listener()
+
         self.topics_to_record = []
         for state_topic in self.state_topics:
+            if not state_topic:  # skip empty entries (e.g. the default placeholder)
+                continue
             callback = self.create_callback(state_topic)
             self.create_subscription(JointState, state_topic, callback, 10)
             self.topics_to_record.append(state_topic)
         for image_topic in self.image_topics:
+            if not image_topic:  # skip empty entries so state-only recording works
+                continue
             callback = self.create_callback(image_topic)
             self.create_subscription(Image, image_topic, callback, 1)
             self.topics_to_record.append(image_topic)
@@ -103,6 +120,28 @@ class DataRecord(Node):
         output_path.unlink()
         self.get_logger().info(colored(f"Deleted trajectory {output_path}", 'light_blue'))
 
+    def toggle_recording(self):
+        """Start a new episode, or stop and save the current one."""
+        if not self.recording:
+            self.get_logger().info(f"Starting data recording")
+            # initialize data log
+            self.data_log = {
+                "data": {},
+                "timestamps": {},
+                "all_timestamps": [],
+            }
+            for topic in self.topics_to_record:
+                self.data_log["data"][topic] = []
+                self.data_log["timestamps"][topic] = []
+            self.recording = True
+        else:
+            self.get_logger().info(f"Stopping data recording")
+            self.recording = False
+
+            all_episodes = [f for f in self.output_dir.iterdir() if f.name.startswith('ep_') and f.name.endswith('.pkl')]
+            ep_index = len(all_episodes)
+            self.save_data(ep_index)
+
     def on_press_key(self, key):
         """Callback function for key press events."""
         try:
@@ -110,30 +149,101 @@ class DataRecord(Node):
                 self.delete_last_trajectory()
                 return
             elif key == keyboard.Key.space:
-                if not self.recording:
-                    self.get_logger().info(f"Starting data recording")
-                    # initialize data log
-                    self.data_log = {
-                        "data": {},
-                        "timestamps": {},
-                        "all_timestamps": [],
-                    }
-                    for topic in self.topics_to_record:
-                        self.data_log["data"][topic] = []
-                        self.data_log["timestamps"][topic] = []
-                    self.recording = True
-                else:
-                    self.get_logger().info(f"Stopping data recording")
-                    self.recording = False
-                    
-                    all_episodes = [f for f in self.output_dir.iterdir() if f.name.startswith('ep_') and f.name.endswith('.pkl')]
-                    ep_index = len(all_episodes)
-                    self.save_data(ep_index)
+                self.toggle_recording()
             else:
                 self.get_logger().info("Press space to start/stop recording; press delete to delete last trajectory")
 
         except AttributeError:
             pass
+
+    def find_foot_pedal(self):
+        """Return the evdev InputDevice for the foot pedal, or None if absent."""
+        try:
+            device_paths = evdev.list_devices()
+        except Exception as e:
+            self.get_logger().warn(colored(f"Could not enumerate input devices for foot pedal: {e}", 'yellow'))
+            return None
+        for path in device_paths:
+            try:
+                device = evdev.InputDevice(path)
+            except (PermissionError, OSError):
+                continue
+            if self.foot_pedal_device.lower() in device.name.lower():
+                return device
+        return None
+
+    def start_foot_pedal_listener(self):
+        """Locate the foot pedal and spin up a background thread to read it."""
+        device = self.find_foot_pedal()
+        if device is None:
+            self.get_logger().warn(colored(
+                f"No foot pedal matching '{self.foot_pedal_device}' found. "
+                f"Falling back to keyboard only (SPACE / DELETE). "
+                f"If a pedal is plugged in, ensure this user is in the 'input' group "
+                f"(sudo usermod -aG input $USER, then re-login).", 'yellow'))
+            return
+        self.get_logger().info(colored(f"Foot pedal found: {device.name} ({device.path})", 'green'))
+        thread = threading.Thread(target=self.foot_pedal_loop, args=(device,), daemon=True)
+        thread.start()
+
+    def load_pedal_map(self):
+        """Load the persisted {keycode: 'left'|'right'} mapping, or {} if none."""
+        if self.foot_pedal_config_path.exists():
+            try:
+                raw = json.loads(self.foot_pedal_config_path.read_text())
+                return {int(k): v for k, v in raw.items()}
+            except Exception as e:
+                self.get_logger().warn(colored(f"Could not read foot pedal config: {e}", 'yellow'))
+        return {}
+
+    def save_pedal_map(self, pedal_map):
+        self.foot_pedal_config_path.parent.mkdir(parents=True, exist_ok=True)
+        self.foot_pedal_config_path.write_text(json.dumps({str(k): v for k, v in pedal_map.items()}))
+
+    def calibrate_pedals(self, device):
+        """Interactively learn which keycode belongs to the left/right pedal."""
+        pedal_map = {}
+        for side, action in (("left", "start/stop an episode"), ("right", "delete the last episode")):
+            self.get_logger().info(colored(
+                f"FOOT PEDAL CALIBRATION: press the {side.upper()} pedal ({action})", 'cyan'))
+            for event in device.read_loop():
+                if event.type != evdev.ecodes.EV_KEY or event.value != 1:  # key down only
+                    continue
+                if event.code in pedal_map:  # already assigned to the other side
+                    continue
+                pedal_map[event.code] = side
+                self.get_logger().info(colored(f"  registered {side} pedal (keycode {event.code})", 'cyan'))
+                break
+        self.save_pedal_map(pedal_map)
+        self.get_logger().info(colored(f"Foot pedal calibration saved to {self.foot_pedal_config_path}", 'green'))
+        return pedal_map
+
+    def foot_pedal_loop(self, device):
+        """Read pedal presses forever and dispatch to the recording controls."""
+        try:
+            device.grab()  # take exclusive access so presses don't leak as keystrokes
+        except (OSError, PermissionError):
+            pass
+        try:
+            pedal_map = self.load_pedal_map()
+            if len(pedal_map) < 2:
+                pedal_map = self.calibrate_pedals(device)
+            self.get_logger().info(colored(
+                "Foot pedal ready: LEFT = start/stop episode, RIGHT = delete last episode", 'green'))
+            for event in device.read_loop():
+                if event.type != evdev.ecodes.EV_KEY or event.value != 1:  # key down only
+                    continue
+                side = pedal_map.get(event.code)
+                if side == "left":
+                    self.toggle_recording()
+                elif side == "right":
+                    self.delete_last_trajectory()
+                else:
+                    self.get_logger().info(colored(
+                        f"Unmapped foot pedal keycode {event.code}. "
+                        f"Delete {self.foot_pedal_config_path} to recalibrate.", 'yellow'))
+        except OSError as e:
+            self.get_logger().warn(colored(f"Foot pedal disconnected or unreadable: {e}", 'yellow'))
 
 def main(args=None):
     rclpy.init(args=args)

@@ -58,8 +58,12 @@ def main(args=None):
             rclpy.spin(factr_teleop_grav_comp)
     except KeyboardInterrupt:
         factr_teleop_grav_comp.get_logger().info("Keyboard interrupt received. Shutting down...")
-        factr_teleop_grav_comp.shut_down()
     finally:
+        # Always run shut_down: under `ros2 launch`, rclpy's SIGINT handler
+        # consumes Ctrl+C and makes spin() return normally (no KeyboardInterrupt),
+        # so putting shut_down only in the except branch leaves Dynamixel torque
+        # enabled and the leader arm latched holding gravity comp.
+        factr_teleop_grav_comp.shut_down()
         rclpy.shutdown()
 
 

@@ -92,6 +92,10 @@ class FACTRTeleop(Node, ABC):
         self.arm_joint_limits_min = np.array(self.config["arm_teleop"]["arm_joint_limits_min"]) + self.safety_margin
         self.calibration_joint_pos = np.array(self.config["arm_teleop"]["initialization"]["calibration_joint_pos"])
         self.initial_match_joint_pos = np.array(self.config["arm_teleop"]["initialization"]["initial_match_joint_pos"])
+        # Pose the leader arm is jogged to on shutdown; defaults to the calibration pose.
+        self.end_pose = np.array(
+            self.config["arm_teleop"]["initialization"].get("end_pose", self.calibration_joint_pos)
+        )
         self.normalize_leader_joint_angles = bool(
             self.config["arm_teleop"]["initialization"].get("normalize_joint_angles", False)
         )
@@ -100,8 +104,8 @@ class FACTRTeleop(Node, ABC):
             self.get_logger().info("Leader joint angle normalization enabled.")
         assert self.num_arm_joints == len(self.arm_joint_limits_max) == len(self.arm_joint_limits_min), \
             "num_arm_joints and the length of arm joint limits must be the same"
-        assert self.num_arm_joints == len(self.calibration_joint_pos) == len(self.initial_match_joint_pos), \
-            "num_arm_joints and the length of calibration_joint_pos and initial_match_joint_pos must be the same"
+        assert self.num_arm_joints == len(self.calibration_joint_pos) == len(self.initial_match_joint_pos) == len(self.end_pose), \
+            "num_arm_joints and the length of calibration_joint_pos, initial_match_joint_pos and end_pose must be the same"
         
         # leader gripper parameters
         self.gripper_limit_min = 0.0
@@ -365,12 +369,142 @@ class FACTRTeleop(Node, ABC):
             print()
         self.get_logger().info(f"FACTR TELEOP {self.name}: Initial joint position matched.")
 
+    def _jog_to_end_pose(self):
+        """
+        Slowly drives the leader arm to self.end_pose (in the follower joint
+        convention) to park it on shutdown, one joint-group at a time.
+
+        The groups are moved in an order that keeps each motor's torque demand low
+        (the weak leader motors saturate if the whole arm moves at once):
+          1. base (id 1)              -- rotate while the arm is still tucked from the
+                                         match pose, i.e. at low inertia
+          2. wrists (ids 4, 5, 6)     -- light distal joints
+          3. long links (ids 2, 3)    -- the heavy shoulder/elbow, moved last and
+                                         alone so they get the full torque budget for
+                                         the (high-gravity) extension
+        Every other joint is actively held (gravity comp + PD) during each stage so
+        nothing sags.
+        """
+        # (label, arm-joint indices [= Dynamixel id - 1], per-stage timeout seconds)
+        stages = [
+            ("base", [0], 4.0),
+            ("wrists", [3, 4, 5], 5.0),
+            ("long links", [1, 2], 6.0),
+        ]
+        # Shutdown runs after rclpy tears its context down, so get_logger() can no
+        # longer publish to rosout; use print() so these messages still show up.
+        for label, idx, stage_timeout in stages:
+            idx = [i for i in idx if i < self.num_arm_joints]
+            if not idx:
+                continue
+            ids = [i + 1 for i in idx]
+            print(f"FACTR TELEOP {self.name}: homing {label} (Dynamixel {ids}).")
+            reached = self._drive_joint_group(idx, stage_timeout)
+            if not reached:
+                print(f"FACTR TELEOP {self.name}: {label} did not fully reach target.")
+        print(f"FACTR TELEOP {self.name}: return-home sequence complete.")
+
+    def _drive_joint_group(self, active_idx, timeout, tol=0.08):
+        """
+        Drives the joints in `active_idx` to their self.end_pose targets while
+        holding all other arm joints at their current position. A virtual per-joint
+        setpoint advances the active joints toward the goal at return_home_speed
+        (rad/s); every joint (moving or held) is PD-controlled with gravity
+        compensation, using the stronger return_home_kp/kd position gains so the
+        motion actually reaches the target rather than stalling short like the weak
+        teleop gains would. Returns True if the active joints reached `tol` rad of
+        their targets, False on timeout.
+        """
+        jpc = self.config["controller"]["joint_position_control"]
+        # Homing is a PI controller (+ gravity comp), NOT a stiff PD: the shutdown
+        # loop runs at ~110 Hz, well under the ~200 Hz a strong PD needs to stay
+        # stable, so a high kp oscillates. Instead we keep kp low (stable) and let a
+        # slow integral term ramp the torque until the joint reaches the goal,
+        # overcoming friction without a high proportional gain. kd defaults to 0
+        # because the Dynamixels' laggy velocity makes damping destabilizing here.
+        kp = jpc.get("return_home_kp", 0.5)
+        kd = jpc.get("return_home_kd", 0.0)
+        ki = jpc.get("return_home_ki", 1.0)
+        i_clamp = jpc.get("return_home_i_clamp", 2.0)  # anti-windup: max integral torque
+        speed = jpc.get("return_home_speed", 0.5)
+        goal = self.end_pose[0:self.num_arm_joints]
+
+        active = np.zeros(self.num_arm_joints, dtype=bool)
+        active[active_idx] = True
+
+        curr_pos, curr_vel, _, _, curr_pos_sim, curr_vel_sim = self.get_leader_joint_states()
+        setpoint = curr_pos.copy()  # held joints stay here; active ones march to goal
+        integral = np.zeros(self.num_arm_joints)
+        start_t = time.monotonic()
+        prev_t = start_t
+        n_loops = 0
+        # No time.sleep(): the serial round-trips already pace the loop, so we run as
+        # fast as the hardware allows to keep the control rate as high as possible.
+        while time.monotonic() - start_t < timeout:
+            now = time.monotonic()
+            dt_real = now - prev_t
+            prev_t = now
+            n_loops += 1
+
+            # Advance only the active joints' setpoints toward the goal, by at most
+            # `speed * dt` this cycle, so they travel at `speed` rad/s in real time.
+            to_goal = (goal - setpoint) * active
+            max_step = speed * dt_real
+            setpoint = setpoint + np.clip(to_goal, -max_step, max_step)
+
+            err = setpoint - curr_pos
+            # Integrate only the active joints; clamp to bound the wind-up torque.
+            integral = np.clip(integral + err * dt_real * active, -i_clamp, i_clamp)
+            torque_arm = kp * err + ki * integral - kd * curr_vel
+            if self.enable_gravity_comp:
+                torque_arm += self.gravity_compensation(curr_pos_sim, curr_vel_sim)
+            self.set_leader_joint_torque(torque_arm, 0.0)
+
+            curr_pos, curr_vel, _, _, curr_pos_sim, curr_vel_sim = self.get_leader_joint_states()
+            if np.abs((goal - curr_pos)[active]).max() < tol:
+                hz = n_loops / max(time.monotonic() - start_t, 1e-6)
+                print(f"FACTR TELEOP {self.name}: stage reached target; loop rate {hz:.0f} Hz.")
+                return True
+        hz = n_loops / max(time.monotonic() - start_t, 1e-6)
+        print(f"FACTR TELEOP {self.name}: stage timed out; loop rate {hz:.0f} Hz.")
+        return False
+
     def shut_down(self):
         """
-        Disables all torque on the leader arm and gripper during node shutdown.
+        Jogs the leader arm to the configured end pose, then disables all torque on
+        the leader arm and gripper during node shutdown.
+
+        Best-effort: any hardware/comm error (e.g. a transient Dynamixel syncwrite
+        failure) is logged but never allowed to escape, so that disabling the
+        Dynamixel torque mode -- the step that makes the arm safe -- always runs.
         """
-        self.set_leader_joint_torque(np.zeros(self.num_arm_joints), 0.0)
-        self.driver.set_torque_mode(False)
+        # Ctrl-C can raise KeyboardInterrupt inside an in-flight Dynamixel
+        # transaction, leaving the port stuck (COMM_PORT_BUSY / stale syncwrite
+        # params) so every call below would fail. Recover the port state first.
+        # Shutdown runs after rclpy tears its context down, so get_logger() can no
+        # longer publish to rosout; use print() so these messages still show up.
+        try:
+            self.driver.recover_port()
+        except Exception as e:
+            print(f"FACTR TELEOP {self.name}: failed to recover Dynamixel port ({e}).")
+        try:
+            self._jog_to_end_pose()
+        except Exception as e:
+            print(f"FACTR TELEOP {self.name}: failed to jog to end pose ({e}).")
+
+        # The arm is now home: turn gravity compensation off so it no longer
+        # actively holds itself up, then zero torque and disable the motors below.
+        self.enable_gravity_comp = False
+        print(f"FACTR TELEOP {self.name}: gravity compensation disabled.")
+
+        try:
+            self.set_leader_joint_torque(np.zeros(self.num_arm_joints), 0.0)
+        except Exception as e:
+            print(f"FACTR TELEOP {self.name}: failed to zero leader torque ({e}).")
+        try:
+            self.driver.set_torque_mode(False)
+        except Exception as e:
+            print(f"FACTR TELEOP {self.name}: failed to disable Dynamixel torque mode ({e}).")
 
     def _normalize_leader_arm_pos(self, joint_pos_arm):
         if not self.normalize_leader_joint_angles:
@@ -594,6 +728,8 @@ class FACTRTeleop(Node, ABC):
         if self.enable_gripper_feedback:
             gripper_feedback = self.get_leader_gripper_feedback()
             torque_gripper += self.gripper_feedback(leader_gripper_pos, leader_gripper_vel, gripper_feedback)
+        
+        torque_gripper += self.config['gripper_teleop']['spring_constant'] * (1 - leader_gripper_pos)
 
         self.set_leader_joint_torque(torque_arm, torque_gripper)
         self.update_communication(leader_arm_pos, leader_gripper_pos)

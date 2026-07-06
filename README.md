@@ -19,7 +19,7 @@ _Carnegie Mellon University_
 - [Data Collection](#data-collection)
 - [Training and Deployment](#training-and-deployment)
 - [License and Acknowledgements](#license-and-acknowledgements)
-- [Citation](#citation)
+- [Citation](#citation)s protection already de-energized it. Rebooting here would on
 
 
 ## Installation

@@ -17,8 +17,10 @@
 # ---------------------------------------------------------------------------
 
 
+import os
 import cv2
 import time
+import yaml
 import rclpy
 import numpy as np
 import pyrealsense2 as rs
@@ -27,18 +29,27 @@ from rclpy.node import Node
 from cv_bridge import CvBridge
 from sensor_msgs.msg import Image
 
+from python_utils.utils import get_workspace_root
+
 
 class RealSenseNode(Node):
     def __init__(self):
         super().__init__('realsense_node')
 
-        self.declare_parameter('serial', "023322060631")
-        self.declare_parameter('name', "realsense")
-        
-        self.rs_serial = self.get_parameter('serial').value
-        self.name = self.get_parameter("name").value
-        
-        self.camera_fps = 30
+        config_file_name = self.declare_parameter('config_file', 'realsense.yaml').value
+        config_path = os.path.join(
+            get_workspace_root(), f"src/cameras/configs/{config_file_name}"
+        )
+        with open(config_path, 'r') as config_file:
+            self.config = yaml.safe_load(config_file)
+        self.get_logger().info(f"Loaded RealSense config from {config_path}")
+
+        self.rs_serial = str(self.config["device"]["serial"])
+        self.name = self.config["device"]["name"]
+
+        self.width = self.config["stream"]["width"]
+        self.height = self.config["stream"]["height"]
+        self.camera_fps = self.config["stream"]["fps"]
         self.initialize_cameras()
         
         self.image_pub = self.create_publisher(Image, f'/realsense/{self.name}/im', 10) 
@@ -48,8 +59,8 @@ class RealSenseNode(Node):
         self.timer = self.create_timer(1/self.camera_fps, self.timer_callback)
         
     def initialize_cameras(self):
-        W = 640
-        H = 480
+        W = self.width
+        H = self.height
         all_detected_cameras = [dev.get_info(rs.camera_info.serial_number) for dev in rs.context().query_devices()]
 
         if self.rs_serial in all_detected_cameras:

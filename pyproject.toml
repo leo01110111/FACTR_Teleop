@@ -1,0 +1,40 @@
+[project]
+name = "factr-teleop-ur7e"
+version = "0.1.0"
+description = "Python (.venv) dependencies layered on top of the ROS 2 Jazzy install."
+# Must match the system interpreter ROS 2 Jazzy uses (see factr_env); do not let
+# uv resolve for other Python versions.
+requires-python = ">=3.12,<3.13"
+
+# Only the pip/venv-layer deps that the code imports directly. ROS-provided
+# packages (rclpy, sensor_msgs, std_msgs, pinocchio/pin) come from apt / the ROS
+# install and must NOT be listed here. Pinned to the known-good versions; numpy is
+# hard-pinned because ROS 2 Jazzy is built against the 1.x ABI.
+dependencies = [
+    "numpy==1.26.4",
+    "pyyaml==6.0.3",
+    "pyzmq==27.1.0",
+    "ur-rtde==1.6.3",
+    "pyserial==3.5",
+    "pynput==1.8.2",
+    "termcolor==3.3.0",
+    "dynamixel_sdk",
+    "pyrealsense2>=2.58.2.10647",
+]
+
+[dependency-groups]
+# Optional interactive/debug tooling (installed in the current .venv but not
+# imported by the code). Install with: uv sync --group dev
+dev = [
+    "ipython",
+    "meshcat",
+]
+
+[tool.uv]
+# This repo is a colcon/ROS workspace, not an installable Python package, so uv
+# should manage the environment without trying to build the repo itself.
+package = false
+
+[tool.uv.sources]
+# The bundled Dynamixel SDK, installed editable from the workspace.
+dynamixel_sdk = { path = "src/factr_teleop/factr_teleop/dynamixel/python", editable = true }

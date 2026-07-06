@@ -59,6 +59,11 @@ def generate_launch_description():
         name=LaunchConfiguration("node_name"),
         output="screen",
         emulate_tty=True,
+        # On Ctrl-C the node slowly returns the leader arm home before exiting.
+        # Give it time to finish before launch escalates SIGINT -> SIGTERM -> SIGKILL
+        # (defaults are only 5 s each, which would force-kill mid-return).
+        sigterm_timeout="22.0",
+        sigkill_timeout="27.0",
         parameters=[
             {"config_file": LaunchConfiguration("config_file")},
             {
