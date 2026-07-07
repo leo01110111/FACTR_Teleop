@@ -569,6 +569,7 @@ class FACTRTeleopUR7e(FACTRTeleop):
         now = time.perf_counter()
         servo_dt = self.dt if self._last_servo_t is None else now - self._last_servo_t
         self._last_servo_t = now
+        print(f"hz of the servo: {1/servo_dt}")
         servo_dt = float(np.clip(servo_dt, 0.002, 0.05))
         # v and a are ignored by servoJ; time/lookahead/gain shape the tracking.
         current_q, obs_wrench = self._get_cached_robot_observation()

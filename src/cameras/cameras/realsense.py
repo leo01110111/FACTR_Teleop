@@ -47,9 +47,23 @@ class RealSenseNode(Node):
         self.rs_serial = str(self.config["device"]["serial"])
         self.name = self.config["device"]["name"]
 
-        self.width = self.config["stream"]["width"]
-        self.height = self.config["stream"]["height"]
-        self.camera_fps = self.config["stream"]["fps"]
+        # Color and depth can run at different resolutions/rates: some devices
+        # can't stream depth at the color resolution (e.g. D455 depth maxes out
+        # at 1280x720, D435 depth at 1280x720 only does 6 fps). Depth is aligned
+        # to color before publishing, so the published depth ends up at the color
+        # resolution regardless. Prefer the nested `stream.color` / `stream.depth`
+        # schema; fall back to a flat `stream.{width,height,fps}` for both.
+        stream = self.config["stream"]
+        color = stream.get("color", stream)
+        depth = stream.get("depth", stream)
+        self.color_width = color["width"]
+        self.color_height = color["height"]
+        self.color_fps = color["fps"]
+        self.depth_width = depth["width"]
+        self.depth_height = depth["height"]
+        self.depth_fps = depth["fps"]
+        # Publishing rate follows the color stream.
+        self.camera_fps = self.color_fps
         self.initialize_cameras()
         
         self.image_pub = self.create_publisher(Image, f'/realsense/{self.name}/im', 10) 
@@ -59,8 +73,6 @@ class RealSenseNode(Node):
         self.timer = self.create_timer(1/self.camera_fps, self.timer_callback)
         
     def initialize_cameras(self):
-        W = self.width
-        H = self.height
         all_detected_cameras = [dev.get_info(rs.camera_info.serial_number) for dev in rs.context().query_devices()]
 
         if self.rs_serial in all_detected_cameras:
@@ -69,8 +81,10 @@ class RealSenseNode(Node):
                 self.pipeline = rs.pipeline()
                 config = rs.config()
                 config.enable_device(self.rs_serial)
-                config.enable_stream(rs.stream.depth, W, H, rs.format.z16, self.camera_fps)
-                config.enable_stream(rs.stream.color, W, H, rs.format.bgr8, self.camera_fps)
+                config.enable_stream(rs.stream.depth, self.depth_width, self.depth_height,
+                                     rs.format.z16, self.depth_fps)
+                config.enable_stream(rs.stream.color, self.color_width, self.color_height,
+                                     rs.format.bgr8, self.color_fps)
 
                 profile = self.pipeline.start(config)
                 depth_sensor = profile.get_device().first_depth_sensor()
@@ -102,7 +116,6 @@ class RealSenseNode(Node):
         return depth_msg
 
     def timer_callback(self):
-        self.get_logger().info(f"RS alive")
         start = time.time()
         frames = self.pipeline.wait_for_frames()
         aligned_frames = self.align.process(frames)

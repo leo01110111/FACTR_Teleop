@@ -20,7 +20,6 @@ import rclpy
 from rclpy.node import Node
 from pynput import keyboard
 
-import json
 import pickle
 import threading
 from pathlib import Path
@@ -56,13 +55,18 @@ class DataRecord(Node):
         listener = keyboard.Listener(on_press=self.on_press_key)
         listener.start()
 
-        # Foot pedal support (PCsensor FootSwitch or similar).
-        # left pedal  -> start / stop an episode (same as SPACE)
-        # right pedal -> delete the most recent episode (same as DELETE)
-        self.declare_parameter('foot_pedal_device', "FootSwitch")
+        # Foot pedal support (PCsensor FootSwitch).
+        # The pedal exposes its key presses through its "Keyboard" endpoint.
+        # See read_pedal.py: on the Keyboard device, left pedal reports
+        # keycode 30 and right pedal reports keycode 48 (value 1 == press down).
+        #   left pedal  -> start / stop an episode (same as SPACE)
+        #   right pedal -> delete the most recent episode (same as DELETE)
+        self.declare_parameter('foot_pedal_device', "FootSwitch Keyboard")
         self.foot_pedal_device = self.get_parameter('foot_pedal_device').value
-        # Persisted keycode->pedal mapping so we only calibrate once.
-        self.foot_pedal_config_path = self.output_dir.parent / ".foot_pedal.json"
+        self.declare_parameter('foot_pedal_left_code', 30)
+        self.foot_pedal_left_code = self.get_parameter('foot_pedal_left_code').value
+        self.declare_parameter('foot_pedal_right_code', 48)
+        self.foot_pedal_right_code = self.get_parameter('foot_pedal_right_code').value
         self.start_foot_pedal_listener()
 
         self.topics_to_record = []
@@ -186,62 +190,27 @@ class DataRecord(Node):
         thread = threading.Thread(target=self.foot_pedal_loop, args=(device,), daemon=True)
         thread.start()
 
-    def load_pedal_map(self):
-        """Load the persisted {keycode: 'left'|'right'} mapping, or {} if none."""
-        if self.foot_pedal_config_path.exists():
-            try:
-                raw = json.loads(self.foot_pedal_config_path.read_text())
-                return {int(k): v for k, v in raw.items()}
-            except Exception as e:
-                self.get_logger().warn(colored(f"Could not read foot pedal config: {e}", 'yellow'))
-        return {}
-
-    def save_pedal_map(self, pedal_map):
-        self.foot_pedal_config_path.parent.mkdir(parents=True, exist_ok=True)
-        self.foot_pedal_config_path.write_text(json.dumps({str(k): v for k, v in pedal_map.items()}))
-
-    def calibrate_pedals(self, device):
-        """Interactively learn which keycode belongs to the left/right pedal."""
-        pedal_map = {}
-        for side, action in (("left", "start/stop an episode"), ("right", "delete the last episode")):
-            self.get_logger().info(colored(
-                f"FOOT PEDAL CALIBRATION: press the {side.upper()} pedal ({action})", 'cyan'))
-            for event in device.read_loop():
-                if event.type != evdev.ecodes.EV_KEY or event.value != 1:  # key down only
-                    continue
-                if event.code in pedal_map:  # already assigned to the other side
-                    continue
-                pedal_map[event.code] = side
-                self.get_logger().info(colored(f"  registered {side} pedal (keycode {event.code})", 'cyan'))
-                break
-        self.save_pedal_map(pedal_map)
-        self.get_logger().info(colored(f"Foot pedal calibration saved to {self.foot_pedal_config_path}", 'green'))
-        return pedal_map
-
     def foot_pedal_loop(self, device):
-        """Read pedal presses forever and dispatch to the recording controls."""
+        """Read pedal presses forever and dispatch to the recording controls.
+
+        Uses the fixed keycodes reported by the pedal's Keyboard endpoint
+        (see read_pedal.py): left = self.foot_pedal_left_code (start/stop),
+        right = self.foot_pedal_right_code (delete last episode).
+        """
         try:
             device.grab()  # take exclusive access so presses don't leak as keystrokes
         except (OSError, PermissionError):
             pass
         try:
-            pedal_map = self.load_pedal_map()
-            if len(pedal_map) < 2:
-                pedal_map = self.calibrate_pedals(device)
             self.get_logger().info(colored(
                 "Foot pedal ready: LEFT = start/stop episode, RIGHT = delete last episode", 'green'))
             for event in device.read_loop():
                 if event.type != evdev.ecodes.EV_KEY or event.value != 1:  # key down only
                     continue
-                side = pedal_map.get(event.code)
-                if side == "left":
+                if event.code == self.foot_pedal_left_code:
                     self.toggle_recording()
-                elif side == "right":
+                elif event.code == self.foot_pedal_right_code:
                     self.delete_last_trajectory()
-                else:
-                    self.get_logger().info(colored(
-                        f"Unmapped foot pedal keycode {event.code}. "
-                        f"Delete {self.foot_pedal_config_path} to recalibrate.", 'yellow'))
         except OSError as e:
             self.get_logger().warn(colored(f"Foot pedal disconnected or unreadable: {e}", 'yellow'))
 

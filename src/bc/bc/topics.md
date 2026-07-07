@@ -6,4 +6,9 @@
 /ur/left/obs_ur_wrench
 
 ## Image topics (sensor_msgs/Image)
-/realsense/realsense/im    # RealSense color stream (cameras/realsense node)
+/realsense/left/im    # D455 color stream (cameras/realsense node, left_cam.yaml)
+/realsense/top/im     # D435 color stream (cameras/realsense node, top_cam.yaml)
+
+## Depth topics (sensor_msgs/Image, 32FC1) -- published but not recorded by default
+/realsense/left/depth
+/realsense/top/depth

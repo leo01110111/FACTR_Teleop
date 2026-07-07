@@ -43,7 +43,7 @@ arm_teleop:
 
 gripper_teleop:
   # max range (rad) of the leader gripper trigger
-  actuation_range: 0.9
+  actuation_range: 0.75
   spring_constant: 0.01
   speed: 255
   force: 128

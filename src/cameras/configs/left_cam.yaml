@@ -1,0 +1,44 @@
+# RealSense camera configuration
+# Loaded by cameras/realsense.py. Override the file per-camera with:
+#   ros2 run cameras realsense --ros-args -p config_file:=realsense.yaml
+#
+# Intrinsics below were read from the physical device at the configured stream
+# resolutions (see `initialize_cameras`). They are informational for downstream
+# consumers; changing resolution changes the effective FOV, so re-query them
+# from the device if you change `stream`.
+
+# Device model: Intel RealSense D455
+device:
+  serial: "220422301536"     # camera serial number (rs-enumerate-devices / query_devices)
+  name: "left"          # used in published topic names: /realsense/<name>/im, /depth
+
+# Depth is streamed at its own resolution and aligned to color before publishing,
+# so the published depth ends up at the color resolution. The D455 depth sensor
+# maxes out at 1280x720, so it cannot match the 1280x800 color stream directly.
+stream:
+  color:
+    width: 1280
+    height: 800
+    fps: 15
+  depth:
+    width: 1280
+    height: 720
+    fps: 15
+
+# Measured intrinsics (color @1280x800, depth stream @1280x720, aligned to color).
+color:
+  hfov_deg: 90.06
+  vfov_deg: 64.12
+  fx: 639.38
+  fy: 638.66
+  ppx: 641.14
+  ppy: 403.24
+
+depth:
+  hfov_deg: 89.30
+  vfov_deg: 58.12
+  fx: 647.88
+  fy: 647.88
+  ppx: 641.49
+  ppy: 362.18
+  depth_scale: 0.001          # meters per raw depth unit
