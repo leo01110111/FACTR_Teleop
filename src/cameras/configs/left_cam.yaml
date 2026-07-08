@@ -18,12 +18,10 @@ device:
 stream:
   color:
     width: 1280
-    height: 800
-    fps: 15
-  depth:
-    width: 1280
     height: 720
     fps: 15
+  offset: 180
+
 
 # Measured intrinsics (color @1280x800, depth stream @1280x720, aligned to color).
 color:

@@ -23,6 +23,18 @@ def create_array_msg(data):
     msg.position = list(map(float, data))
     return msg
 
+def pd_joint_torque(target_q, q, dq, kp, kd,
+                    tau_max):
+    """Joint-space PD control law -> per-joint clamped torques [Nm].
+
+    tau = kp*(target_q - q) - kd*dq, clipped per-joint to +/- tau_max.
+    """
+    target_q = np.asarray(target_q, dtype=np.float64)
+    q = np.asarray(q, dtype=np.float64)
+    dq = np.asarray(dq, dtype=np.float64)
+    tau = kp * (target_q - q) - kd * dq
+    return np.clip(tau, -tau_max, tau_max)
+
 
 class RobotiqGripper:
     """
@@ -85,17 +97,16 @@ class FACTRTeleopUR7e(FACTRTeleop):
     UR RTDE (ur_rtde).
 
     Unlike the Franka example, there is no separate follower process and no ZMQ
-    hop: the UR control box is itself the follower controller. We stream joint
-    position targets to it with servoJ (the controller does the real-time
-    interpolation/tracking internally), read the external TCP wrench for joint-
-    space force-feedback, and drive a Robotiq 2F-85 gripper over its URCap socket.
+    hop: the UR control box is itself the follower controller. We close a joint-
+    space PD loop and stream the resulting torques with directTorque, read the
+    external TCP wrench for joint-space force-feedback, and drive a Robotiq 2F-85
+    gripper over its URCap socket.
     """
 
     def __init__(self):
         self.gripper_feedback_magnitude = 0.2
         self.gripper_torque_ema_beta = 0.9
         self.gripper_current_limit_ma = 250.0
-        self._last_servo_t = None
         super().__init__()
         # Only needed if force-feedback to the leader gripper is enabled. Use
         # .get() so the demo/teleop configs that disable it need not carry gains.
@@ -145,14 +156,38 @@ class FACTRTeleopUR7e(FACTRTeleop):
 
         frequency = float(self.config["controller"]["frequency"])
 
-        # gain chases. ~0.1 / ~300 is a good starting point for policy-rate teleop.
         servo_cfg = self.config["arm_teleop"].get("servo", {})
-        # lookahead time is in seconds and it asks how smoother
-        #servoJ has an internal smoother where it sets accel such that the newest target gets there at lookahead_time
-            #gain decides how stiffly the arm follows the plan created.
-        self.servo_lookahead_time = servo_cfg.get("lookahead_time", 0.1)
-        self.servo_gain = servo_cfg.get("gain", 300.0)
         self.servo_command_hz = float(servo_cfg.get("command_hz", frequency))
+
+        # Direct-torque PD controller. Gains are read strictly
+        # from the config's `controller.torque` block -- there are no defaults, so
+        # a missing/mis-sized gain raises rather than silently running on a guess.
+        try:
+            torque_cfg = self.config["controller"]["torque"]
+        except KeyError:
+            raise KeyError(
+                f"FACTR UR7e {self.name}: config is missing the required "
+                f"'controller.torque' block (must define kp, kd, tau_max)."
+            )
+
+        def _required_gain(key):
+            if key not in torque_cfg:
+                raise KeyError(
+                    f"FACTR UR7e {self.name}: 'controller.torque.{key}' is required "
+                    f"but missing from the config."
+                )
+            gain = np.asarray(torque_cfg[key], dtype=np.float64)
+            if gain.shape != (self.num_arm_joints,):
+                raise ValueError(
+                    f"FACTR UR7e {self.name}: 'controller.torque.{key}' must have "
+                    f"{self.num_arm_joints} values (one per joint), got {gain.shape[0]}."
+                )
+            return gain
+
+        self.pd_kp = _required_gain("kp")
+        self.pd_kd = _required_gain("kd")
+        self.pd_tau_max = _required_gain("tau_max")
+        self.pd_friction_comp = bool(torque_cfg.get("friction_comp", True))
         self.observation_hz = float(servo_cfg.get("observation_hz", self.servo_command_hz))
         self.enable_fast_servo_thread = self.enable_collision_safety and bool(
             servo_cfg.get("fast_servo_thread", True)
@@ -191,7 +226,7 @@ class FACTRTeleopUR7e(FACTRTeleop):
             RTDEControlInterface.FLAG_USE_EXT_UR_CAP, self.ur_cap_port,
         )
         # Safety net: if commands stop arriving faster than this, the controller
-        # stops the arm. servoJ in the control loop is the heartbeat that kicks it.
+        # stops the arm. directTorque in the control loop is the heartbeat.
         self.rtde_c.setWatchdog(self.watchdog_min_frequency)
         self.get_logger().info(f"FACTR UR7e {self.name}: RTDE connected ({self.rtde_c.isConnected()}).")
 
@@ -200,12 +235,12 @@ class FACTRTeleopUR7e(FACTRTeleop):
         # zeroing removes residual bias/drift. The arm must be static here.
         self.rtde_c.zeroFtSensor()
 
-        # SAFETY: the first servoJ target will be the leader's matched pose
-        # (initial_match_joint_pos, the shared start reference). If the follower
-        # UR is not already near it, the arm will jump on the first command.
-        # Refuse to start (fail-safe) and tear down the RTDE session. The fix is
-        # to jog the UR to initial_match_joint_pos before launching -- do NOT
-        # change the config to the UR's current pose, that would desync the
+        # SAFETY: the first command drives the follower toward the leader's matched
+        # pose (initial_match_joint_pos, the shared start reference). If the
+        # follower UR is not already near it, the arm will jump on the first
+        # command. Refuse to start (fail-safe) and tear down the RTDE session. The
+        # fix is to jog the UR to initial_match_joint_pos before launching -- do
+        # NOT change the config to the UR's current pose, that would desync the
         # leader matching / calibration.
         follower_q = np.array(self.rtde_r.getActualQ())
         match_q = self.initial_match_joint_pos[0:self.num_arm_joints]
@@ -213,7 +248,6 @@ class FACTRTeleopUR7e(FACTRTeleop):
         per_joint_err = np.abs(follower_q[:self.num_arm_joints] - match_q[:self.num_arm_joints])
         if np.any(per_joint_err > 0.5):
             try:
-                self.rtde_c.servoStop()
                 self.rtde_c.stopScript()
                 self.rtde_c.disconnect()
                 self.rtde_r.disconnect()
@@ -223,7 +257,7 @@ class FACTRTeleopUR7e(FACTRTeleop):
                 f"FACTR UR7e {self.name}: follower start config differs from "
                 f"initial_match_joint_pos per-joint by "
                 f"{[round(float(e), 3) for e in per_joint_err]} rad (limit 0.5). "
-                f"Refusing to start to avoid a servoJ jump. "
+                f"Refusing to start to avoid a jump. "
                 f"Jog the UR to initial_match_joint_pos = {[round(x, 4) for x in match_q]} "
                 f"before launching (UR is currently at "
                 f"{[round(x, 4) for x in follower_q.tolist()]})."
@@ -321,9 +355,25 @@ class FACTRTeleopUR7e(FACTRTeleop):
         self._servo_thread = threading.Thread(target=self._servo_loop, daemon=True)
         self._servo_thread.start()
         self.get_logger().info(
-            f"FACTR UR7e {self.name}: fast servoJ thread running at "
+            f"FACTR UR7e {self.name}: fast direct-torque thread running at "
             f"{self.servo_command_hz:.1f} Hz."
         )
+
+    def _servo_to(self, target_q):
+        """Drive the follower toward ``target_q`` with a direct-torque PD loop.
+
+        We close the joint-space PD loop ourselves and send the torque via
+        directTorque(), which must be called every cycle or the controller reverts
+        to position control. Gravity is compensated internally.
+        """
+        n = self.num_arm_joints
+        target_q = np.asarray(target_q, dtype=np.float64)[:n]
+        q = np.asarray(self.rtde_r.getActualQ(), dtype=np.float64)[:n]
+        dq = np.asarray(self.rtde_r.getActualQd(), dtype=np.float64)[:n]
+        tau = pd_joint_torque(
+            target_q, q, dq, self.pd_kp, self.pd_kd, self.pd_tau_max
+        )
+        self.rtde_c.directTorque(tau.tolist(), friction_comp=self.pd_friction_comp)
 
     def _servo_loop(self):
         period = 1.0 / max(self.servo_command_hz, 1.0)
@@ -357,18 +407,9 @@ class FACTRTeleopUR7e(FACTRTeleop):
 
             if target_q is not None:
                 try:
-                    # After we send a servoJ command, we then update our previous commanded joint positions
-                    # to operate as a fallback (so we hold the last commanded joint positions). By using 
-                    # _servo_lock, we ensure that no other variable can overwrite the following variables 
-                    # in the with ___ statement
-                    self.rtde_c.servoJ(
-                        list(map(float, target_q)),
-                        0.0,
-                        0.0,
-                        period,
-                        self.servo_lookahead_time,
-                        self.servo_gain,
-                    )
+                    # Cache the last commanded pose (under the lock) so it can be
+                    # held as a fallback if fresh targets stop arriving.
+                    self._servo_to(target_q)
                     with self._servo_lock:
                         self._servo_last_cmd_q = target_q.copy()
                         self._servo_last_cmd_t = time.monotonic()
@@ -382,7 +423,7 @@ class FACTRTeleopUR7e(FACTRTeleop):
                             self._servo_last_status_t = self._servo_last_cmd_t
                 except Exception as exc:
                     if self._servo_thread_running:
-                        self.get_logger().warn(f"fast servoJ thread error: {exc}")
+                        self.get_logger().warn(f"fast direct-torque thread error: {exc}")
                     time.sleep(period)
 
             next_tick += period
@@ -561,17 +602,8 @@ class FACTRTeleopUR7e(FACTRTeleop):
 
     # ----------------------------------------------------------- command stream
     def update_communication(self, leader_arm_pos, leader_gripper_pos):
-        # servoJ's `time` arg must match the ACTUAL interval between calls, not the
-        # nominal 1/frequency. The loop is Dynamixel/feedback-bound and runs well
-        # below the configured rate (~130 Hz vs 500 Hz) with jitter, so passing
-        # self.dt (=0.002) makes each target expire before the next arrives and the
-        # arm barely moves. Measure the real period and feed that instead.
-        now = time.perf_counter()
-        servo_dt = self.dt if self._last_servo_t is None else now - self._last_servo_t
-        self._last_servo_t = now
-        print(f"hz of the servo: {1/servo_dt}")
-        servo_dt = float(np.clip(servo_dt, 0.002, 0.05))
-        # v and a are ignored by servoJ; time/lookahead/gain shape the tracking.
+        # The direct-torque PD controller (_servo_to) closes on instantaneous
+        # joint state, so it needs no per-call time argument.
         current_q, obs_wrench = self._get_cached_robot_observation()
         if current_q is None:
             current_q, obs_wrench = self._read_robot_observation()
@@ -593,10 +625,7 @@ class FACTRTeleopUR7e(FACTRTeleop):
             logged_cmd_q = target_q
 
         if not self.enable_fast_servo_thread:
-            self.rtde_c.servoJ(
-                list(map(float, target_q)),
-                0.0, 0.0, servo_dt, self.servo_lookahead_time, self.servo_gain,
-            )
+            self._servo_to(target_q)
             logged_cmd_q = target_q
 
         # Map the leader trigger angle to the Robotiq command space (0..255).
@@ -634,9 +663,12 @@ class FACTRTeleopUR7e(FACTRTeleop):
         self._gripper_thread_running = False
         if getattr(self, "_gripper_thread", None) is not None:
             self._gripper_thread.join(timeout=1.0)
-        # Land the arm: stop servoing, release the control script, disconnect.
+        # Land the arm: zero the direct torque, release the control script,
+        # disconnect. Zeroing torque hands control back cleanly from direct
+        # torque control.
         try:
-            self.rtde_c.servoStop()
+            self.rtde_c.directTorque([0.0] * self.num_arm_joints,
+                                     friction_comp=self.pd_friction_comp)
         except Exception:
             pass
         try:

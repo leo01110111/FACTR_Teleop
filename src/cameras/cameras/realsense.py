@@ -62,6 +62,19 @@ class RealSenseNode(Node):
         self.depth_width = depth["width"]
         self.depth_height = depth["height"]
         self.depth_fps = depth["fps"]
+        # Optional in-plane rotation (degrees) applied to color + aligned depth
+        # before publishing, for cameras mounted rotated (e.g. upside down).
+        # Only multiples of 90 are supported.
+        self.rotate_deg = int(stream.get("offset", 0)) % 360
+        if self.rotate_deg not in (0, 90, 180, 270):
+            raise ValueError(
+                f"stream.offset must be a multiple of 90, got {self.rotate_deg}"
+            )
+        self._rotate_code = {
+            90: cv2.ROTATE_90_CLOCKWISE,
+            180: cv2.ROTATE_180,
+            270: cv2.ROTATE_90_COUNTERCLOCKWISE,
+        }.get(self.rotate_deg)
         # Publishing rate follows the color stream.
         self.camera_fps = self.color_fps
         self.initialize_cameras()
@@ -99,12 +112,18 @@ class RealSenseNode(Node):
             exit()
         # cv2.namedWindow("Live RGB Image", cv2.WINDOW_NORMAL)
        
+    def _apply_rotation(self, image):
+        if self._rotate_code is None:
+            return image
+        return cv2.rotate(image, self._rotate_code)
+
     def get_rgb_msg(self, aligned_frames):
         color_frame = aligned_frames.get_color_frame()
         image_data = np.asanyarray(color_frame.get_data())
         # cv2.imshow("Live RGB Image", image_data)
         # cv2.waitKey(1)
         image_rgb = cv2.cvtColor(image_data, cv2.COLOR_BGRA2RGB)
+        image_rgb = self._apply_rotation(image_rgb)
         image_msg = self.bridge.cv2_to_imgmsg(image_rgb, encoding="rgb8")
         return image_msg
 
@@ -112,6 +131,7 @@ class RealSenseNode(Node):
         aligned_depth_frame = aligned_frames.get_depth_frame()
         depth_image = np.asanyarray(aligned_depth_frame.get_data())
         depth_image = depth_image.astype(np.float32)/1000
+        depth_image = self._apply_rotation(depth_image)
         depth_msg = self.bridge.cv2_to_imgmsg(depth_image, encoding="32FC1")
         return depth_msg
 
