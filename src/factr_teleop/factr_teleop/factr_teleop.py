@@ -455,7 +455,7 @@ class FACTRTeleop(Node, ABC):
             err = setpoint - curr_pos
             # Integrate only the active joints; clamp to bound the wind-up torque.
             integral = np.clip(integral + err * dt_real * active, -i_clamp, i_clamp)
-            torque_arm = kp * err + ki * integral - kd * curr_vel
+            torque_arm = (kp * err + ki * integral - kd * curr_vel) * active
             if self.enable_gravity_comp:
                 torque_arm += self.gravity_compensation(curr_pos_sim, curr_vel_sim)
             self.set_leader_joint_torque(torque_arm, 0.0)

@@ -42,7 +42,7 @@ arm_teleop:
 gripper_teleop:
   # max range (rad) of the leader gripper trigger
   actuation_range: 0.9
-  spring_constant: -0.01
+  spring_constant: 0.01
   speed: 255
   force: 128
   # 255 is closed 0 is open for robotiq 2f-85 grippr
@@ -53,8 +53,8 @@ controller:
   # Direct-torque PD gains for the follower (base -> wrist3). Tuned in
   # torque_ctrl_musings/torque_test.py.
   torque:
-    kp: [160.0, 160.0, 160.0, 130.0, 100.0, 80.0]
-    kd: [30.0, 30.0, 30.0, 30.0, 1.0, 1.0]
+    kp: [385.0, 200.0, 200.0, 80.0, 50.0, 96.0]
+    kd: [55.0, 30.0, 30.0, 9.0, 7.0, 7.0]
     tau_max: [50.0, 50.0, 30.0, 12.0, 12.0, 12.0]
     friction_comp: true
   torque_feedback:
@@ -65,7 +65,8 @@ controller:
   gravity_comp:
     enable: True
     # Per-joint gains: [base, shoulder, elbow, wrist1, wrist2, wrist3].
-    gain: [0.0, 0.3, 0.85, 0.4, 0.4, 0.0]
+    #0.2
+    gain: [0.0, 0.25, 0.85, 0.3, 0.24, 0.0]
   null_space_regulation:
     # Disabled: a 6-DOF arm doing a 6-DOF task is non-redundant (kp=kd=0 => no null-space torque).
     null_space_joint_target: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
@@ -85,7 +86,7 @@ controller:
     # PI controller (+ gravity comp): the ~110 Hz shutdown loop is too slow for a
     # stiff PD, so keep kp LOW (stable) and let the integral reach the goal.
     return_home_speed: 0.5     # rad/s per joint; lower = slower/gentler
-    return_home_kp: 0.5        # low: high kp oscillates at the low shutdown loop rate
+    return_home_kp: 0.80        # low: high kp oscillates at the low shutdown loop rate
     return_home_ki: 1.0        # integral: ramps torque until the joint reaches goal
     return_home_i_clamp: 2.0   # anti-windup cap on the integral torque
     return_home_kd: 0.0        # off: laggy Dynamixel velocity makes damping unstable here

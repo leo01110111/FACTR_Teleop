@@ -1,0 +1,19 @@
+# Arducam UVC USB camera configuration
+# Loaded by cameras/arducam.py. Select the file per-camera with:
+#   ros2 run cameras arducam --ros-args -p config_file:=right_cam.yaml
+#
+# Unlike the RealSense configs there are no intrinsics/depth here: the Arducam
+# is a plain UVC webcam driven through OpenCV's V4L2 backend (color only).
+
+device:
+  # Stable /dev/v4l/by-id/... path (keyed to the Arducam's model + serial UC852),
+  # so it survives replug/reboot regardless of the /dev/videoN number the kernel
+  # assigns. -video-index0 is the capture node (index1 is metadata-only).
+  # Currently resolves to /dev/video6. A bare index ("6") also works.
+  path: "/dev/v4l/by-id/usb-Arducam_Technology_Co.__Ltd._Arducam_OV9782_USB_Camera_UC852-video-index0"
+  name: "right"        # used in the published topic name: /arducam/<name>/im
+
+stream:
+  width: 1280
+  height: 800
+  fps: 15

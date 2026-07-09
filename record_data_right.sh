@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Record teleop observation data as a ROS node (bc/data_record.py).
 #
-# Also launches the RealSense camera nodes (left = D455, top = D435) so their
-# color streams are recorded alongside the state topics. Subscribes to the
+# Also launches the right-arm camera nodes (right = Arducam UVC, top = D435
+# RealSense) so their color streams are recorded alongside the state topics.
+# Subscribes to the
 # observation topics listed in src/bc/bc/topics.md and saves episodes to
 # raw_data/<dataset_name>/ as ep_00000.pkl, ep_00001.pkl, ...
 #
@@ -15,7 +16,7 @@
 # user to the 'input' group once with
 #   sudo usermod -aG input "$USER"   (then log out and back in).
 #
-# Usage: ./record_data.sh [dataset_name]      (default: test)
+# Usage: ./record_data_right.sh [dataset_name]      (default: test)
 set -e
 
 DATASET="${1:-test}"
@@ -29,12 +30,12 @@ fi
 
 source ./factr_env
 
-# Start both RealSense camera nodes in the background. Each publishes its color
-# stream on /realsense/<name>/im (and depth on /realsense/<name>/depth), which
-# data_record subscribes to below. Distinct node names avoid a name collision.
-#   left_cam.yaml -> D455, name "left" -> /realsense/left/im
-#   top_cam.yaml  -> D435, name "top"  -> /realsense/top/im
-ros2 run cameras realsense --ros-args -p config_file:=left_cam.yaml -r __node:=realsense_left &
+# Start the right-arm camera nodes in the background. Each publishes its color
+# stream (Arducam -> /arducam/<name>/im, RealSense -> /realsense/<name>/im),
+# which data_record subscribes to below. Distinct node names avoid a collision.
+#   right_cam.yaml -> Arducam UVC, name "right" -> /arducam/right/im
+#   top_cam.yaml   -> D435,        name "top"   -> /realsense/top/im
+ros2 run cameras arducam --ros-args -p config_file:=right_cam.yaml -r __node:=arducam_right &
 CAMERA_PIDS=($!)
 ros2 run cameras realsense --ros-args -p config_file:=top_cam.yaml -r __node:=realsense_top &
 CAMERA_PIDS+=($!)
@@ -52,6 +53,6 @@ trap cleanup EXIT INT TERM
 #   state_topics -> JointState observations
 #   image_topics -> camera color streams (sensor_msgs/Image)
 ros2 run bc data_record --ros-args \
-    -p state_topics:="['/ur/left/obs_ur_state', '/ur/left/obs_gripper', '/ur/left/obs_ur_wrench']" \
-    -p image_topics:="['/realsense/left/im', '/realsense/top/im']" \
+    -p state_topics:="['/ur/right/obs_ur_state', '/ur/right/obs_gripper', '/ur/right/obs_ur_wrench']" \
+    -p image_topics:="['/arducam/right/im', '/realsense/top/im']" \
     -p dataset_name:="${DATASET}"

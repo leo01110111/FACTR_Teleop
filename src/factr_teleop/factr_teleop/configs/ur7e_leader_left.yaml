@@ -53,8 +53,8 @@ controller:
   # Direct-torque PD gains for the follower (base -> wrist3). Tuned in
   # torque_ctrl_musings/torque_test.py.
   torque:
-    kp: [160.0, 160.0, 160.0, 130.0, 100.0, 80.0]
-    kd: [30.0, 30.0, 30.0, 30.0, 1.0, 1.0]
+    kp: [385.0, 200.0, 200.0, 80.0, 50.0, 96.0]
+    kd: [55.0, 30.0, 30.0, 9.0, 7.0, 7.0]
     tau_max: [50.0, 50.0, 30.0, 12.0, 12.0, 12.0]
     friction_comp: true
   torque_feedback:

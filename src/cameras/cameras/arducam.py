@@ -17,14 +17,18 @@
 # ---------------------------------------------------------------------------
 
 
+import os
 import cv2
 import time
+import yaml
 import rclpy
 import numpy as np
 
 from rclpy.node import Node
 from cv_bridge import CvBridge
 from sensor_msgs.msg import Image
+
+from python_utils.utils import get_workspace_root
 
 
 class ArducamNode(Node):
@@ -39,19 +43,25 @@ class ArducamNode(Node):
     def __init__(self):
         super().__init__('arducam_node')
 
-        # `device` may be a numeric index ("0" -> /dev/video0) or a path such as
-        # /dev/v4l/by-id/usb-Arducam_...-video-index0 (stable across reboots).
-        self.declare_parameter('device', "0")
-        self.declare_parameter('name', "arducam")
-        self.declare_parameter('width', 1920)
-        self.declare_parameter('height', 1080)
-        self.declare_parameter('fps', 30)
+        # Every camera node is driven by an explicit yaml spec -- no baked-in
+        # defaults for the device/resolution/rate. Select it with e.g.
+        #   ros2 run cameras arducam --ros-args -p config_file:=right_cam.yaml
+        config_file_name = self.declare_parameter('config_file', 'right_cam.yaml').value
+        config_path = os.path.join(
+            get_workspace_root(), f"src/cameras/configs/{config_file_name}"
+        )
+        with open(config_path, 'r') as config_file:
+            self.config = yaml.safe_load(config_file)
+        self.get_logger().info(f"Loaded Arducam config from {config_path}")
 
-        self.device = self.get_parameter('device').value
-        self.name = self.get_parameter('name').value
-        self.width = self.get_parameter('width').value
-        self.height = self.get_parameter('height').value
-        self.camera_fps = self.get_parameter('fps').value
+        # `device.path` may be a numeric index ("6" -> /dev/video6) or a path such
+        # as /dev/v4l/by-id/usb-Arducam_...-video-index0 (stable across reboots).
+        self.device = self.config["device"]["path"]
+        self.name = self.config["device"]["name"]
+        stream = self.config["stream"]
+        self.width = stream["width"]
+        self.height = stream["height"]
+        self.camera_fps = stream["fps"]
 
         self.initialize_camera()
 
