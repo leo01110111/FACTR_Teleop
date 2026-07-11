@@ -21,6 +21,8 @@ setup(
         'console_scripts': [
             'factr_teleop_franka = factr_teleop.factr_teleop_franka_zmq:main',
             'factr_teleop_ur7e = factr_teleop.factr_teleop_ur7e:main',
+            'factr_teleop_ur7e_rollout = factr_teleop.factr_teleop_ur7e_rollout:main',
+            'factr_teleop_ur7e_sim = factr_teleop.factr_teleop_ur7e_sim:main',
             'ur7e_collision_monitor = factr_teleop.ur7e_collision_monitor:main',
             'isaac_cumotion_stream_bridge = factr_teleop.isaac_cumotion_stream_bridge:main',
             'factr_teleop_grav_comp_demo = factr_teleop.factr_teleop_grav_comp_demo:main',

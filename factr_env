@@ -21,10 +21,13 @@ source "$REPO/install/setup.bash"
 # symlink to it). A process started that way does NOT load the venv's site-packages,
 # so venv-only deps (ur_rtde / rtde_control, pyzmq) and the editable dynamixel_sdk
 # would be missing. Bridge them onto PYTHONPATH so the system interpreter finds them.
-# (.pth files in PYTHONPATH dirs are not processed, so the editable dynamixel_sdk
-# source dir is added explicitly.)
+# (.pth files in PYTHONPATH dirs are not processed, so the editable dynamixel_sdk,
+# the editable FACTR policy package, and the editable ur_sim MuJoCo env are added
+# by their source dirs explicitly.)
 PYVER="$("$REPO/.venv/bin/python" -c 'import sys;print(f"python{sys.version_info.major}.{sys.version_info.minor}")')"
-export PYTHONPATH="$REPO/.venv/lib/$PYVER/site-packages:$REPO/src/factr_teleop/factr_teleop/dynamixel/python/src${PYTHONPATH:+:$PYTHONPATH}"
+FACTR_REPO="/home/leo/FACTR"
+UR_SIM_REPO="/home/leo/maxlab"
+export PYTHONPATH="$REPO/.venv/lib/$PYVER/site-packages:$REPO/src/factr_teleop/factr_teleop/dynamixel/python/src:$FACTR_REPO:$UR_SIM_REPO${PYTHONPATH:+:$PYTHONPATH}"
 
 echo "FACTR env active: ROS 2 Jazzy + .venv + workspace overlay  ($REPO)"
 

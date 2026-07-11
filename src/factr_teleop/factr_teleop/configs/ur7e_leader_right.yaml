@@ -20,6 +20,7 @@ arm_teleop:
   servo:
     fast_servo_thread: true
     command_hz: 500.0
+    max_joint_speed: 0.5
     observation_thread: true
     observation_hz: 500.0
     watchdog_min_frequency: 100.0

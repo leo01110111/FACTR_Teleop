@@ -55,7 +55,9 @@ class RealSenseNode(Node):
         # schema; fall back to a flat `stream.{width,height,fps}` for both.
         stream = self.config["stream"]
         color = stream.get("color", stream)
-        depth = stream.get("depth", stream)
+        # No dedicated depth stream config: depth is aligned to color before
+        # publishing, so fall back to the color resolution, not the raw stream dict.
+        depth = stream.get("depth", color)
         self.color_width = color["width"]
         self.color_height = color["height"]
         self.color_fps = color["fps"]

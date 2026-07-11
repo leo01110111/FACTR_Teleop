@@ -19,3 +19,6 @@ plots/
 # misc
 .vscode/
 AGENTS.md
+
+# mujoco
+MUJOCO_LOG.TXT

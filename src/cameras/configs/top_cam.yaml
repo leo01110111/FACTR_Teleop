@@ -19,7 +19,11 @@ device:
 stream:
   color:
     width: 1280
-    height: 800
+    height: 720
+    fps: 15
+  depth:
+    width: 640
+    height: 480
     fps: 15
   offset: 180
 
