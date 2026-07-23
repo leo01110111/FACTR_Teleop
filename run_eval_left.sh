@@ -7,7 +7,7 @@
 #   * factr_teleop_ur7e_rollout: subscribes to the policy command topics and
 #     servos the follower UR7e over ur_rtde directTorque (no Dynamixel leader);
 #   * bc/policy_rollout: loads the checkpoint, runs inference, publishes the
-#     command topics. save_data is enabled in the launch file.
+#     command topics. save_data defaults off; pass save_data:=true to log.
 #
 # Order of operations (see launch/rollout.py header for the full rationale):
 #   1. On the pendant, load + Play the ExternalControl program for the LEFT arm.

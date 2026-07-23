@@ -48,6 +48,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description():
@@ -64,6 +65,12 @@ def generate_launch_description():
         "data_dir",
         default_value="/home/leo/FACTR/checkpoints/test/rollout",
         description="Absolute path to the trained rollout checkpoint directory.",
+    )
+
+    save_data_arg = DeclareLaunchArgument(
+        "save_data",
+        default_value="false",
+        description="Whether the policy_rollout node logs rollout data to disk.",
     )
 
     # ---- RealSense cameras (match record_data_left.sh) ----------------------
@@ -112,7 +119,8 @@ def generate_launch_description():
         name="policy_rollout_node",
         output="screen",
         parameters=[
-            {"save_data": True},
+            {"save_data": ParameterValue(
+                LaunchConfiguration("save_data"), value_type=bool)},
             {"data_dir": LaunchConfiguration("data_dir")},
         ],
     )
@@ -120,6 +128,7 @@ def generate_launch_description():
     return LaunchDescription([
         config_file_arg,
         data_dir_arg,
+        save_data_arg,
         realsense_left_node,
         realsense_top_node,
         ur7e_rollout_node,
