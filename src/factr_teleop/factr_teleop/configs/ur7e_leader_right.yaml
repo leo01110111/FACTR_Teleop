@@ -86,10 +86,21 @@ controller:
     # Shutdown return-home motion (staged: base -> wrists -> long links).
     # PI controller (+ gravity comp): the ~110 Hz shutdown loop is too slow for a
     # stiff PD, so keep kp LOW (stable) and let the integral reach the goal.
+    # Each gain below is a scalar OR a per-joint list of 6
+    # ([base, shoulder, elbow, wrist1, wrist2, wrist3]). The shoulder (index 1) is
+    # an XM430-W350-T here where the left arm uses an XM430-W210-T: the same
+    # commanded Nm becomes ~561 mA instead of ~372 mA, so the stock ki/i_clamp wind
+    # up to a much larger torque before stiction breaks and the joint jerks. The
+    # shoulder therefore gets a softer integral and a lower windup cap.
     return_home_speed: 0.5     # rad/s per joint; lower = slower/gentler
-    return_home_kp: 0.80        # low: high kp oscillates at the low shutdown loop rate
-    return_home_ki: 1.0        # integral: ramps torque until the joint reaches goal
-    return_home_i_clamp: 2.0   # anti-windup cap on the integral torque
+    # Shoulder kp is raised so the proportional term does the lifting immediately
+    # instead of waiting for the integral to wind up (which is what jerks). Raise
+    # further if it stalls short of the goal; back off if it starts oscillating.
+    return_home_kp: [0.80, 2.90, 0.80, 0.80, 0.80, 0.80]
+    # integral: ramps torque until the joint reaches goal
+    return_home_ki: [1.0, 0.5, 1.0, 1.0, 1.0, 1.0]
+    # anti-windup cap on the integral torque
+    return_home_i_clamp: [2.0, 1.2, 2.0, 2.0, 2.0, 2.0]
     return_home_kd: 0.0        # off: laggy Dynamixel velocity makes damping unstable here
   gripper_feedback:
     enable: False

@@ -1,3 +1,5 @@
+## RUNBOOK
+Please reference "RUNBOOK.md" for using the Max Lab FACTR arms. Below is the readme from the original Factr codebase.
 
 <h1> FACTR Teleop: Low-Cost Force-Feedback Teleoperation</h1>
 
@@ -14,12 +16,22 @@ _Carnegie Mellon University_
 <br>
 
 ## Catalog
+- [RUNBOOK](#runbook)
+    - [Jason Jingzhou Liu\*, Yulong Li\*, Kenneth Shaw, Tony Tao, Ruslan Salakhutdinov, Deepak Pathak](#jason-jingzhou-liu-yulong-li-kenneth-shaw-tony-tao-ruslan-salakhutdinov-deepak-pathak)
+- [Catalog](#catalog)
 - [Installation](#installation)
+  - [Provided ROS 2 Packages](#provided-ros-2-packages)
+  - [ROS 2 Workspace Setup](#ros-2-workspace-setup)
+  - [Additional Python Dependencies](#additional-python-dependencies)
 - [FACTR Teleop](#factr-teleop)
 - [Data Collection](#data-collection)
+  - [Data Structure](#data-structure)
+  - [Key Components:](#key-components)
 - [Training and Deployment](#training-and-deployment)
+  - [Data Processing and Training](#data-processing-and-training)
+  - [Policy Rollout](#policy-rollout)
 - [License and Acknowledgements](#license-and-acknowledgements)
-- [Citation](#citation)s protection already de-energized it. Rebooting here would on
+- [Citation](#citation)
 
 
 ## Installation

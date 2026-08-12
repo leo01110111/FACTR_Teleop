@@ -404,6 +404,22 @@ class FACTRTeleop(Node, ABC):
                 print(f"FACTR TELEOP {self.name}: {label} did not fully reach target.")
         print(f"FACTR TELEOP {self.name}: return-home sequence complete.")
 
+    def _return_home_gain(self, jpc, key, default):
+        """
+        Reads a return-home gain from the config as a per-joint array. The value may
+        be a scalar (broadcast to every arm joint) or a list of num_arm_joints
+        entries, so a single joint whose motor differs from the rest can be tuned
+        without changing the others.
+        """
+        value = np.asarray(jpc.get(key, default), dtype=float)
+        if value.ndim == 0:
+            return np.full(self.num_arm_joints, float(value))
+        assert value.shape == (self.num_arm_joints,), (
+            f"{key} must be a scalar or a list of {self.num_arm_joints} values, "
+            f"got shape {value.shape}"
+        )
+        return value
+
     def _drive_joint_group(self, active_idx, timeout, tol=0.08):
         """
         Drives the joints in `active_idx` to their self.end_pose targets while
@@ -422,11 +438,20 @@ class FACTRTeleop(Node, ABC):
         # slow integral term ramp the torque until the joint reaches the goal,
         # overcoming friction without a high proportional gain. kd defaults to 0
         # because the Dynamixels' laggy velocity makes damping destabilizing here.
-        kp = jpc.get("return_home_kp", 0.5)
-        kd = jpc.get("return_home_kd", 0.0)
-        ki = jpc.get("return_home_ki", 1.0)
-        i_clamp = jpc.get("return_home_i_clamp", 2.0)  # anti-windup: max integral torque
-        speed = jpc.get("return_home_speed", 0.5)
+        #
+        # Each gain may be a scalar (same value for every joint) or a list of
+        # num_arm_joints values. Per-joint values exist because the arms do not use
+        # identical Dynamixels: e.g. the right arm's shoulder is an XM430-W350-T
+        # where the left's is an XM430-W210-T, so the same commanded Nm maps to a
+        # different current (see TORQUE_TO_CURRENT_MAPPING) and the same ki/i_clamp
+        # winds up to a much larger torque before stiction breaks -- which shows up
+        # as the shoulder jerking rather than gliding to the goal.
+        kp = self._return_home_gain(jpc, "return_home_kp", 0.5)
+        kd = self._return_home_gain(jpc, "return_home_kd", 0.0)
+        ki = self._return_home_gain(jpc, "return_home_ki", 1.0)
+        # anti-windup: max integral torque
+        i_clamp = self._return_home_gain(jpc, "return_home_i_clamp", 2.0)
+        speed = self._return_home_gain(jpc, "return_home_speed", 0.5)
         goal = self.end_pose[0:self.num_arm_joints]
 
         active = np.zeros(self.num_arm_joints, dtype=bool)
